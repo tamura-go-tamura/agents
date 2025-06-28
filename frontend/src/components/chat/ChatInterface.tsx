@@ -25,6 +25,22 @@ interface AnalysisResult {
   };
 }
 
+interface PreviewResult {
+  has_warnings: boolean;
+  has_violations: boolean;
+  preview_warnings: Array<{
+    policy_name: string;
+    warning_type: string;
+    description: string;
+  }>;
+  preview_violations: Array<{
+    policy_name: string;
+    violation_type: string;
+    description: string;
+  }>;
+  suggestion: string;
+}
+
 interface ChatMessage {
   id: string;
   content: string;
@@ -40,8 +56,11 @@ export function ChatInterface() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [realtimeAnalysis, setRealtimeAnalysis] = useState<AnalysisResult | null>(null);
+  const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
+  const [isPreviewAnalyzing, setIsPreviewAnalyzing] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const previewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     let reconnectAttempts = 0;
@@ -200,6 +219,20 @@ export function ChatInterface() {
   const handleRealtimeAnalysis = (value: string) => {
     setMessage(value);
     
+    // 前のタイマーをクリア
+    if (previewTimeoutRef.current) {
+      clearTimeout(previewTimeoutRef.current);
+    }
+    
+    // プレビュー分析を実行（デバウンス処理）
+    if (value.trim()) {
+      previewTimeoutRef.current = setTimeout(() => {
+        performPreviewAnalysis(value);
+      }, 500);
+    } else {
+      setPreviewResult(null);
+    }
+    
     if (value.trim() && wsRef.current?.readyState === WebSocket.OPEN && user) {
       // リアルタイム分析要求
       wsRef.current.send(JSON.stringify({
@@ -209,6 +242,44 @@ export function ChatInterface() {
       }));
     } else {
       setRealtimeAnalysis(null);
+    }
+  };
+
+  const performPreviewAnalysis = async (messageText: string) => {
+    if (!messageText.trim() || !user) {
+      setPreviewResult(null);
+      return;
+    }
+
+    setIsPreviewAnalyzing(true);
+
+    try {
+      const idToken = await user.getIdToken();
+      
+      const response = await fetch('/api/preview-message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          message: messageText,
+          user_id: user.email || "",
+          timestamp: new Date().toISOString()
+        })
+      });
+
+      if (response.ok) {
+        const result: PreviewResult = await response.json();
+        setPreviewResult(result);
+      } else {
+        setPreviewResult(null);
+      }
+    } catch (error) {
+      console.error('Preview analysis failed:', error);
+      setPreviewResult(null);
+    } finally {
+      setIsPreviewAnalyzing(false);
     }
   };
 
@@ -317,28 +388,67 @@ export function ChatInterface() {
 
                 {/* 入力エリア */}
                 <div className="space-y-2">
+                  {/* プレビュー分析結果表示 */}
+                  {previewResult && (
+                    <Alert className={`${
+                      previewResult.has_violations 
+                        ? 'border-red-500 bg-red-50' 
+                        : previewResult.has_warnings 
+                        ? 'border-yellow-500 bg-yellow-50' 
+                        : 'border-green-500 bg-green-50'
+                    }`}>
+                      <div className="flex items-start space-x-2">
+                        {previewResult.has_violations ? (
+                          <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5" />
+                        ) : previewResult.has_warnings ? (
+                          <Shield className="h-4 w-4 text-yellow-500 mt-0.5" />
+                        ) : (
+                          <Shield className="h-4 w-4 text-green-500 mt-0.5" />
+                        )}
+                        <div className="flex-1">
+                          <AlertDescription className="text-sm">
+                            {previewResult.suggestion}
+                          </AlertDescription>
+                          {(previewResult.preview_violations.length > 0 || previewResult.preview_warnings.length > 0) && (
+                            <div className="mt-2 space-y-1">
+                              {previewResult.preview_violations.map((violation, index) => (
+                                <div key={index} className="text-xs text-red-600">
+                                  • {violation.description}
+                                </div>
+                              ))}
+                              {previewResult.preview_warnings.map((warning, index) => (
+                                <div key={index} className="text-xs text-yellow-600">
+                                  • {warning.description}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {isPreviewAnalyzing && (
+                          <div className="animate-spin">
+                            <Clock className="h-4 w-4" />
+                          </div>
+                        )}
+                      </div>
+                    </Alert>
+                  )}
+                  
                   <Textarea
                     value={message}
                     onChange={(e) => handleRealtimeAnalysis(e.target.value)}
                     placeholder="メッセージを入力してください..."
                     className="min-h-[80px]"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
                   />
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-500">
-                      Enter: 送信 | Shift+Enter: 改行
+                      送信ボタンを押して送信 | Shift+Enter: 改行
                     </span>
                     <Button 
                       onClick={handleSendMessage}
                       disabled={!message.trim() || isAnalyzing}
                       className="flex items-center space-x-2"
                     >
-                      <Send className="h-4 w-4" />
+                      
                       <span>送信</span>
                     </Button>
                   </div>

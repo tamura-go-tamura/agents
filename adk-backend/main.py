@@ -136,6 +136,56 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.info("WebSocket connection cleanup completed")
 
 
+@app.post("/api/preview-message")
+async def preview_message(request: MessageAnalysisRequest):
+    """メッセージプレビュー分析API（軽量版）"""
+    try:
+        logger.info(f"Previewing message from user: {request.user_id}")
+
+        # Agent Coordinatorでポリシーチェックのみ実行（軽量版）
+        result = await agent_coordinator.route_request(
+            request_type="policy_check", data=request.dict()
+        )
+
+        # プレビュー用のレスポンス形式
+        preview_response = {
+            "has_warnings": len(result.get("warnings", [])) > 0,
+            "has_violations": len(result.get("violations", [])) > 0,
+            "preview_warnings": result.get("warnings", [])[
+                :2
+            ],  # 最初の2つのみ
+            "preview_violations": result.get("violations", [])[
+                :2
+            ],  # 最初の2つのみ
+            "suggestion": _generate_preview_suggestion(result),
+        }
+
+        return preview_response
+
+    except Exception as e:
+        logger.error(f"Message preview failed: {e}")
+        return {
+            "has_warnings": False,
+            "has_violations": False,
+            "preview_warnings": [],
+            "preview_violations": [],
+            "suggestion": "メッセージを送信できます",
+        }
+
+
+def _generate_preview_suggestion(analysis_result: Dict[str, Any]) -> str:
+    """プレビュー用の提案メッセージ生成"""
+    violations = analysis_result.get("violations", [])
+    warnings = analysis_result.get("warnings", [])
+
+    if violations:
+        return "⚠️ このメッセージには問題が含まれている可能性があります。内容を確認してください。"
+    elif warnings:
+        return "💡 より適切な表現を検討することをお勧めします。"
+    else:
+        return "✅ メッセージを送信できます"
+
+
 # WebSocket接続テスト用エンドポイント
 @app.get("/ws-test")
 async def websocket_test():

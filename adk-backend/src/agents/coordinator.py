@@ -96,6 +96,8 @@ class AgentCoordinator:
                 return await self._handle_voice_analysis(data)
             elif request_type == "generate_report":
                 return await self._handle_report_generation(data)
+            elif request_type == "policy_check":
+                return await self._handle_policy_check(data)
             else:
                 raise ValueError(f"Unknown request type: {request_type}")
 
@@ -170,6 +172,27 @@ class AgentCoordinator:
             "message": "Report generation not implemented yet",
             "processing_time_ms": 200,
         }
+
+    async def _handle_policy_check(
+        self, data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """ポリシーチェックフロー"""
+        start_time = time.time()
+
+        try:
+            result = await self.agents["policy_manager"].check_compliance(
+                data
+            )
+
+            # 処理時間追加
+            processing_time = int((time.time() - start_time) * 1000)
+            result["processing_time_ms"] = processing_time
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Policy check failed: {e}")
+            return self._create_fallback_response(str(e), start_time)
 
     def _merge_analysis_results(
         self, chat_result: Optional[Dict], policy_result: Optional[Dict]
