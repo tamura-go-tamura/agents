@@ -54,6 +54,7 @@ export function ChatRoom({ room }: ChatRoomProps) {
   const [isPreviewAnalyzing, setIsPreviewAnalyzing] = useState(false);
   const [realtimeAnalysis, setRealtimeAnalysis] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [isAnalysisMode, setIsAnalysisMode] = useState(false); // 検知モードのトグル
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const previewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -75,6 +76,18 @@ export function ChatRoom({ room }: ChatRoomProps) {
   const handleSendMessage = async () => {
     if (!message.trim() || !user || !room.id) return;
 
+    // 検知モードでない場合は、普通のチャットメッセージとして送信
+    if (!isAnalysisMode) {
+      try {
+        await sendMessage(room.id, message);
+        setMessage('');
+      } catch (error) {
+        console.error('Failed to send message:', error);
+      }
+      return;
+    }
+
+    // 検知モードの場合は分析も実行
     setIsAnalyzing(true);
     
     try {
@@ -114,6 +127,12 @@ export function ChatRoom({ room }: ChatRoomProps) {
 
   const handleRealtimeAnalysis = (value: string) => {
     setMessage(value);
+    
+    // 検知モードでない場合はリアルタイム分析をスキップ
+    if (!isAnalysisMode) {
+      setRealtimeAnalysis(null);
+      return;
+    }
     
     // 前のタイマーをクリア
     if (previewTimeoutRef.current) {
@@ -259,8 +278,8 @@ export function ChatRoom({ room }: ChatRoomProps) {
 
           {/* Message Input - 画面下部固定 */}
           <div className="flex-shrink-0 bg-white border-t">
-            {/* リアルタイム分析表示 */}
-            {(isPreviewAnalyzing || realtimeAnalysis || analysisError) && (
+            {/* リアルタイム分析表示 - 検知モードの時のみ */}
+            {isAnalysisMode && (isPreviewAnalyzing || realtimeAnalysis || analysisError) && (
               <div className="p-4 border-b bg-gradient-to-r from-gray-50 to-blue-50">
                 {/* ローディング状態 */}
                 {isPreviewAnalyzing && (
@@ -357,7 +376,7 @@ export function ChatRoom({ room }: ChatRoomProps) {
             )}
             
             <div className="p-4">
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Textarea
                   value={message}
                   onChange={(e) => handleRealtimeAnalysis(e.target.value)}
@@ -366,6 +385,7 @@ export function ChatRoom({ room }: ChatRoomProps) {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
+                      handleSendMessage();
                     }
                   }}
                 />
@@ -373,14 +393,49 @@ export function ChatRoom({ room }: ChatRoomProps) {
                   <span className="text-sm text-gray-500">
                     Enter: 送信 | Shift+Enter: 改行
                   </span>
-                  <Button 
-                    onClick={handleSendMessage}
-                    disabled={!message.trim() || isAnalyzing}
-                    className="flex items-center space-x-2"
-                  >
-                    <Send className="h-4 w-4" />
-                    <span>送信</span>
-                  </Button>
+                  <div className="flex items-center space-x-3">
+                    {/* トグルスイッチ */}
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs text-gray-500">検知</span>
+                      <button
+                        onClick={() => {
+                          setIsAnalysisMode(!isAnalysisMode);
+                          // モード切り替え時にリアルタイム分析をリセット
+                          if (isAnalysisMode) {
+                            setRealtimeAnalysis(null);
+                          }
+                        }}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                          isAnalysisMode ? 'bg-blue-600' : 'bg-gray-300'
+                        }`}
+                        type="button"
+                        role="switch"
+                        aria-checked={isAnalysisMode}
+                        title={isAnalysisMode ? '検知モードON' : '検知モードOFF'}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
+                            isAnalysisMode ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    
+                    <Button 
+                      onClick={handleSendMessage}
+                      disabled={!message.trim() || isAnalyzing}
+                      className="flex items-center space-x-2"
+                    >
+                      {isAnalysisMode ? (
+                        <Shield className="h-4 w-4" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                      <span>
+                        {isAnalyzing ? '送信中...' : '送信'}
+                      </span>
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
