@@ -3,7 +3,12 @@ SafeComm ADK Backend
 Google Cloud Agent Development Kit を使用したコミュニケーション監視システム
 """
 
-from fastapi import FastAPI, WebSocket, HTTPException, Depends
+from fastapi import (
+    FastAPI,
+    WebSocket,
+    HTTPException,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 import json
 import asyncio
@@ -15,7 +20,6 @@ import logging
 from src.config.settings import Settings
 from src.agents.coordinator import AgentCoordinator
 from src.models.message import MessageAnalysisRequest, MessageAnalysisResponse
-from src.auth.firebase_auth import verify_token
 
 # ロギング設定
 logging.basicConfig(level=logging.INFO)
@@ -31,7 +35,10 @@ app = FastAPI(
 # CORS設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.jsフロントエンド
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+    ],  # Next.jsフロントエンド
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -66,29 +73,16 @@ async def root():
     }
 
 
+# Health check endpoint
 @app.get("/health")
 async def health_check():
     """ヘルスチェック"""
-    try:
-        status = (
-            await agent_coordinator.health_check()
-            if agent_coordinator
-            else "not_initialized"
-        )
-        return {
-            "status": "healthy",
-            "adk_status": status,
-            "timestamp": "2025-06-28T06:00:00Z",
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"status": "healthy", "message": "SafeComm ADK Backend is running"}
 
 
 @app.post("/api/analyze-message", response_model=MessageAnalysisResponse)
-async def analyze_message(
-    request: MessageAnalysisRequest, token: dict = Depends(verify_token)
-):
-    """メッセージ分析API"""
+async def analyze_message(request: MessageAnalysisRequest):
+    """メッセージ分析API（内部サービス用）"""
     try:
         logger.info(f"Analyzing message from user: {request.user_id}")
 
@@ -128,9 +122,28 @@ async def websocket_endpoint(websocket: WebSocket):
             # 結果送信
             await websocket.send_text(json.dumps(result))
 
+    except WebSocketDisconnect:
+        logger.info("WebSocket connection closed by client")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
-        await websocket.close(code=1000)
+        try:
+            # Try to close the connection safely
+            await websocket.close(code=1000)
+        except:
+            # Connection might already be closed, ignore the error
+            pass
+    finally:
+        logger.info("WebSocket connection cleanup completed")
+
+
+# WebSocket接続テスト用エンドポイント
+@app.get("/ws-test")
+async def websocket_test():
+    """WebSocket接続テスト用"""
+    return {
+        "websocket_url": "ws://localhost:8080/ws/realtime-analysis",
+        "status": "ready",
+    }
 
 
 if __name__ == "__main__":

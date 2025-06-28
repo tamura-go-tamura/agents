@@ -21,7 +21,6 @@ class MessageAnalysisRequest(BaseModel):
 
     message: str
     user_id: str
-    department: str
     role: str = "member"
     channel_type: str = "public"  # "public", "private", "direct"
     timestamp: Optional[datetime] = None
@@ -58,7 +57,6 @@ class DemoUser(BaseModel):
     id: str
     name: str
     email: str
-    department: str  # 'engineering' | 'sales' | 'hr' | 'management'
     role: str  # 'member' | 'manager' | 'admin'
     avatar: Optional[str] = None
 
@@ -75,10 +73,9 @@ class PolicyRule(BaseModel):
 
 
 class CompanyPolicy(BaseModel):
-    """企業ポリシー"""
+    """企業ポリシー（全社共通）"""
 
     id: str
-    department: str
     policy_type: str  # 'harassment' | 'confidential' | 'general'
     rules: List[PolicyRule]
     created_at: datetime

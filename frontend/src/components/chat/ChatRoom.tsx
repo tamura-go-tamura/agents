@@ -37,35 +37,79 @@ export function ChatRoom({ room, onBack }: ChatRoomProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [realtimeAnalysis, setRealtimeAnalysis] = useState<AnalysisResult | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const connectWebSocket = React.useCallback(() => {
     if (!user) return;
     
+    // 既に接続中の場合は何もしない
+    if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
+      console.log('WebSocket connection already in progress');
+      return;
+    }
+    
+    // 既存の接続があれば閉じる
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+      wsRef.current.close();
+    }
+    
     try {
+      console.log('Attempting WebSocket connection to ws://localhost:8080/ws/realtime-analysis');
       wsRef.current = new WebSocket('ws://localhost:8080/ws/realtime-analysis');
       
-      wsRef.current.onopen = () => {
-        console.log('WebSocket connected for real-time analysis');
+      wsRef.current.onopen = (event) => {
+        console.log('WebSocket connected for real-time analysis', event);
+        setWsConnected(true);
       };
       
       wsRef.current.onmessage = (event) => {
-        const analysis: AnalysisResult = JSON.parse(event.data);
-        setRealtimeAnalysis(analysis);
+        try {
+          console.log('WebSocket message received:', event.data);
+          const analysis: AnalysisResult = JSON.parse(event.data);
+          setRealtimeAnalysis(analysis);
+        } catch (error) {
+          console.error('Failed to parse WebSocket message:', error);
+        }
       };
       
       wsRef.current.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.error('WebSocket error details:', {
+          error,
+          readyState: wsRef.current?.readyState,
+          url: wsRef.current?.url
+        });
+        setWsConnected(false);
       };
       
-      wsRef.current.onclose = () => {
-        console.log('WebSocket disconnected');
-        // Retry connection
-        setTimeout(connectWebSocket, 3000);
+      wsRef.current.onclose = (event) => {
+        console.log('WebSocket disconnected:', {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean
+        });
+        setWsConnected(false);
+        
+        // Only retry if not a normal close
+        if (event.code !== 1000 && user) {
+          console.log('Retrying WebSocket connection in 3 seconds...');
+          setTimeout(() => {
+            if (user) { // Check user is still available
+              connectWebSocket();
+            }
+          }, 3000);
+        }
       };
     } catch (error) {
-      console.error('Failed to connect WebSocket:', error);
+      console.error('Failed to create WebSocket connection:', error);
+      setWsConnected(false);
+      // Retry after error
+      setTimeout(() => {
+        if (user) {
+          connectWebSocket();
+        }
+      }, 3000);
     }
   }, [user]);
 
@@ -77,13 +121,16 @@ export function ChatRoom({ room, onBack }: ChatRoomProps) {
       setMessages(newMessages);
     });
 
-    // Connect WebSocket for real-time analysis
-    connectWebSocket();
+    // Connect WebSocket for real-time analysis with a small delay
+    const connectTimer = setTimeout(() => {
+      connectWebSocket();
+    }, 100);
     
     return () => {
       unsubscribe();
-      if (wsRef.current) {
-        wsRef.current.close();
+      clearTimeout(connectTimer);
+      if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+        wsRef.current.close(1000, 'Component unmounting');
       }
     };
   }, [room.id, connectWebSocket]);
@@ -97,8 +144,8 @@ export function ChatRoom({ room, onBack }: ChatRoomProps) {
       // Send message to Firestore
       const messageId = await sendMessage(room.id, message);
       
-      // Send to backend for analysis
-      const response = await fetch('http://localhost:8080/api/analyze-message', {
+      // Send to Next.js API Route for analysis
+      const response = await fetch('/api/analyze-message', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -117,6 +164,8 @@ export function ChatRoom({ room, onBack }: ChatRoomProps) {
         
         // Update message with analysis result
         await updateMessageAnalysis(messageId, analysis);
+      } else {
+        console.error('Analysis failed:', response.status, await response.text());
       }
     } catch (error) {
       console.error('Failed to send message:', error);

@@ -44,31 +44,68 @@ export function ChatInterface() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    const reconnectDelay = 3000;
+
     // WebSocket接続関数を定義
     const connectWebSocket = () => {
       try {
+        // 既存の接続があれば閉じる
+        if (wsRef.current) {
+          wsRef.current.close();
+        }
+
+        console.log('Attempting WebSocket connection to ws://localhost:8080/ws/realtime-analysis');
         wsRef.current = new WebSocket('ws://localhost:8080/ws/realtime-analysis');
         
-        wsRef.current.onopen = () => {
-          console.log('WebSocket connected');
+        wsRef.current.onopen = (event) => {
+          console.log('WebSocket connected successfully', event);
+          reconnectAttempts = 0; // 再接続カウンターをリセット
         };
         
         wsRef.current.onmessage = (event) => {
-          const analysis: AnalysisResult = JSON.parse(event.data);
-          setRealtimeAnalysis(analysis);
+          try {
+            console.log('WebSocket message received:', event.data);
+            const analysis: AnalysisResult = JSON.parse(event.data);
+            setRealtimeAnalysis(analysis);
+          } catch (error) {
+            console.error('Failed to parse WebSocket message:', error);
+          }
         };
         
         wsRef.current.onerror = (error) => {
-          console.error('WebSocket error:', error);
+          console.error('WebSocket error details:', {
+            error,
+            readyState: wsRef.current?.readyState,
+            url: wsRef.current?.url,
+            protocol: wsRef.current?.protocol
+          });
         };
         
-        wsRef.current.onclose = () => {
-          console.log('WebSocket disconnected');
-          // 再接続試行
-          setTimeout(connectWebSocket, 3000);
+        wsRef.current.onclose = (event) => {
+          console.log('WebSocket disconnected:', {
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean,
+            readyState: wsRef.current?.readyState
+          });
+          
+          // 正常終了以外で、再接続試行回数が上限未満の場合は再接続
+          if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            console.log(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts})...`);
+            setTimeout(connectWebSocket, reconnectDelay);
+          }
         };
       } catch (error) {
         console.error('Failed to connect WebSocket:', error);
+        
+        // 接続失敗時も再接続を試行
+        if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectAttempts++;
+          setTimeout(connectWebSocket, reconnectDelay);
+        }
       }
     };
 
@@ -80,7 +117,7 @@ export function ChatInterface() {
     
     return () => {
       if (wsRef.current) {
-        wsRef.current.close();
+        wsRef.current.close(1000, 'Component unmounting');
       }
     };
   }, []);
@@ -117,17 +154,19 @@ export function ChatInterface() {
     setMessages(prev => [...prev, newMessage]);
 
     try {
-      // バックエンドAPIでメッセージ分析
-      const response = await fetch('http://localhost:8080/api/analyze-message', {
+      // Firebase IDトークンを取得
+      const idToken = await user.getIdToken();
+      
+      // Next.js APIルート経由でメッセージ分析
+      const response = await fetch('/api/analyze-message', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('safecomm_demo_token')}`
+          'Authorization': `Bearer ${idToken}`
         },
         body: JSON.stringify({
           message: message,
           user_id: user.email || "",
-          department: user.department,
           timestamp: new Date().toISOString()
         })
       });
@@ -165,8 +204,7 @@ export function ChatInterface() {
       // リアルタイム分析要求
       wsRef.current.send(JSON.stringify({
         message: value,
-        user_id: user.id,
-        department: user.department,
+        user_id: user.email || "",
         timestamp: new Date().toISOString()
       }));
     } else {
@@ -209,12 +247,11 @@ export function ChatInterface() {
             <div className="flex items-center space-x-2">
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="text-sm">
-                  {user.avatar || user.name.charAt(0)}
+                  {user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
                 </AvatarFallback>
               </Avatar>
               <div>
-                <p className="text-sm font-medium">{user.name}</p>
-                <p className="text-xs text-gray-500">{user.department}</p>
+                <p className="text-sm font-medium">{user.displayName}</p>
               </div>
             </div>
             <Button variant="outline" size="sm" onClick={logout}>
@@ -239,11 +276,11 @@ export function ChatInterface() {
                 {/* メッセージエリア */}
                 <div className="flex-1 overflow-y-auto space-y-4 mb-4">
                   {messages.map((msg) => (
-                    <div key={msg.id} className={`flex ${msg.user_id === 'system' ? 'justify-center' : msg.user_id === user.id ? 'justify-end' : 'justify-start'}`}>
+                    <div key={msg.id} className={`flex ${msg.user_id === 'system' ? 'justify-center' : msg.user_id === (user.email || user.uid) ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
                         msg.user_id === 'system' 
                           ? 'bg-blue-100 text-blue-800 text-sm'
-                          : msg.user_id === user.id 
+                          : msg.user_id === (user.email || user.uid)
                             ? 'bg-blue-500 text-white' 
                             : 'bg-gray-200'
                       }`}>

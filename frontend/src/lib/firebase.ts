@@ -68,7 +68,6 @@ export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
-  department?: string;
   role?: string;
   photoURL?: string;
   createdAt: Timestamp;
@@ -133,7 +132,7 @@ export const logout = async (): Promise<void> => {
 };
 
 // User profile functions
-export const createOrUpdateUserProfile = async (user: User, additionalData?: { displayName?: string; department?: string; role?: string }): Promise<void> => {
+export const createOrUpdateUserProfile = async (user: User, additionalData?: { displayName?: string; role?: string }): Promise<void> => {
   const userRef = doc(db, 'users', user.uid);
   
   const userData: Partial<UserProfile> = {

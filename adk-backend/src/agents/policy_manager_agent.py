@@ -72,13 +72,10 @@ class PolicyManagerAgent:
 
         message = data.get("message", "")
         user_id = data.get("user_id", "")
-        department = data.get("department", "general")
 
         try:
-            # ユーザー・部署別ポリシー取得
-            applicable_policies = await self._get_applicable_policies(
-                user_id, department
-            )
+            # 全社共通ポリシー取得（部署区分なし）
+            applicable_policies = await self._get_applicable_policies(user_id)
 
             # 各ポリシーに対してチェック実行
             violations = []
@@ -133,33 +130,27 @@ class PolicyManagerAgent:
             return self._create_error_response(str(e))
 
     async def _get_applicable_policies(
-        self, user_id: str, department: str
+        self, user_id: str
     ) -> List[Dict[str, Any]]:
-        """適用可能なポリシー取得"""
+        """適用可能なポリシー取得（全社共通ポリシーのみ）"""
 
         applicable_policies = []
 
         for policy_id, policy in self.policies.items():
-            # 部署別適用チェック
-            if self._is_policy_applicable(policy, user_id, department):
+            # 全社共通ポリシーまたはユーザー固有ポリシーを適用
+            if self._is_policy_applicable(policy, user_id):
                 applicable_policies.append(policy)
 
         return applicable_policies
 
     def _is_policy_applicable(
-        self, policy: Dict[str, Any], user_id: str, department: str
+        self, policy: Dict[str, Any], user_id: str
     ) -> bool:
-        """ポリシー適用可否判定"""
+        """ポリシー適用可否判定（部署区分なし）"""
 
-        # 全社適用ポリシー
-        if policy.get("scope") == "company_wide":
+        # 全社適用ポリシー（デフォルト）
+        if policy.get("scope") == "company_wide" or not policy.get("scope"):
             return True
-
-        # 部署限定ポリシー
-        if policy.get("scope") == "department":
-            applicable_departments = policy.get("applicable_departments", [])
-            if department in applicable_departments:
-                return True
 
         # ユーザー固有ポリシー
         if policy.get("scope") == "user_specific":
@@ -519,9 +510,7 @@ class PolicyManagerAgent:
         # TODO: Firestore実装後に実装
         pass
 
-    async def create_custom_policy(
-        self, department: str, policy_data: Dict[str, Any]
-    ) -> str:
+    async def create_custom_policy(self, policy_data: Dict[str, Any]) -> str:
         """カスタムポリシー作成"""
         # TODO: Firestore実装後に実装
         pass
