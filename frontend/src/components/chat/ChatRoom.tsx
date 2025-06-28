@@ -27,21 +27,22 @@ interface AnalysisResult {
   suggestions: string[];
   flagged_content: string[];
   processing_time_ms: number;
-  compliance_notes?: string;
-  detailed_analysis?: {
-    sentiment?: string;
-    emotion?: string;
-    communication_style?: string;
-    risk_indicators?: Array<{
-      type: string;
-      description: string;
-      severity: string;
-    }>;
-    policy_details?: {
-      violation_type?: string;
-      severity?: string;
-      keywords_detected?: string[];
-    };
+  compliance_notes: string;
+  detailed_analysis: {
+    sentiment: "positive"|"neutral"|"negative",
+    emotion: "happy"|"sad"|"angry"|"neutral"|"excited"|"worried",
+    communication_style: string,
+    risk_indicators:{
+        type: string,
+        description: string, 
+        severity: "low"|"medium"|"high"
+      }[]
+,
+    policy_details: {
+      violation_type: string,
+      severity: "low"|"medium"|"high",
+      keywords_detected: string[]
+    }
   };
 }
 
@@ -218,7 +219,7 @@ export function ChatRoom({ room }: ChatRoomProps) {
     try {
       const idToken = await user.getIdToken();
       
-      const response = await fetch('/api/preview-message', {
+      const response = await fetch('/api/analyze-message', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -237,23 +238,11 @@ export function ChatRoom({ room }: ChatRoomProps) {
       });
 
       if (response.ok) {
-        const policyResult = await response.json();
+        const analysisResult = await response.json();
         
-        
-        // 構造化されたレスポンスをAnalysisResult形式に変換
-        const realtimeResult: AnalysisResult = {
-          risk_level: policyResult.violation_detected ? 'DANGER' : 
-                     (policyResult?.detailed_analysis?.risk_indicators?.length > 0 ? 'WARNING' : 'SAFE'),
-          confidence: policyResult.confidence_score || 0.85,
-          detected_issues: policyResult.violation_detected ? [policyResult.explanation] : [],
-          suggestions: policyResult.suggestions || [],
-          flagged_content: policyResult.keywords_detected || [],
-          processing_time_ms: 100,
-          compliance_notes: policyResult.explanation,
-          detailed_analysis: policyResult?.detailed_analysis || {}
-        };
-        
-        setRealtimeAnalysis(realtimeResult);
+        // プロンプトベースマルチエージェントのレスポンスをそのまま使用
+        // （すでに正しいAnalysisResult形式）
+        setRealtimeAnalysis(analysisResult);
       } else {
         setAnalysisError(`分析に失敗しました: ${response.status}`);
         setRealtimeAnalysis(null);
@@ -385,40 +374,47 @@ export function ChatRoom({ room }: ChatRoomProps) {
                     </div>
 
                     {/* 詳細分析情報 */}
-                    {realtimeAnalysis.detailed_analysis && (
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                        {realtimeAnalysis.detailed_analysis.sentiment && (
-                          <div className="bg-white p-2 rounded-lg border">
-                            <div className="text-xs font-medium text-gray-500 mb-1">感情</div>
-                            <div className="text-sm capitalize">
-                              {realtimeAnalysis.detailed_analysis.sentiment === 'positive' ? '😊 ポジティブ' :
-                               realtimeAnalysis.detailed_analysis.sentiment === 'negative' ? '😟 ネガティブ' : '😐 中性'}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                      {realtimeAnalysis.sentiment && (
+                        <div className="bg-white p-2 rounded-lg border">
+                          <div className="text-xs font-medium text-gray-500 mb-1">感情</div>
+                          <div className="text-sm capitalize">
+                            {realtimeAnalysis.sentiment === 'positive' ? '😊 ポジティブ' :
+                             realtimeAnalysis.sentiment === 'negative' ? '😟 ネガティブ' : '😐 中性'}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {realtimeAnalysis.emotion && (
+                        <div className="bg-white p-2 rounded-lg border">
+                          <div className="text-xs font-medium text-gray-500 mb-1">感情表現</div>
+                          <div className="text-sm capitalize">
+                            {realtimeAnalysis.emotion === 'happy' ? '😄 楽しい' :
+                             realtimeAnalysis.emotion === 'angry' ? '😡 怒り' :
+                             realtimeAnalysis.emotion === 'worried' ? '� 心配' : '😐 中性'}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* ハラスメント・機密情報の詳細 */}
+                    {(realtimeAnalysis.detailed_analysis.harassment.harassment_detected || 
+                      realtimeAnalysis.detailed_analysis.confidential.confidential_detected) && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                        {realtimeAnalysis.detailed_analysis.harassment.harassment_detected && (
+                          <div className="bg-red-50 p-2 rounded-lg border border-red-200">
+                            <div className="text-xs font-medium text-red-600 mb-1">ハラスメント検知</div>
+                            <div className="text-sm text-red-700">
+                              検出アイテム: {realtimeAnalysis.detailed_analysis.harassment.harassment_items?.length || 0}件
                             </div>
                           </div>
                         )}
                         
-                        {realtimeAnalysis.detailed_analysis.emotion && (
-                          <div className="bg-white p-2 rounded-lg border">
-                            <div className="text-xs font-medium text-gray-500 mb-1">感情表現</div>
-                            <div className="text-sm capitalize">
-                              {realtimeAnalysis.detailed_analysis.emotion === 'joy' ? '😄 喜び' :
-                               realtimeAnalysis.detailed_analysis.emotion === 'anger' ? '😡 怒り' :
-                               realtimeAnalysis.detailed_analysis.emotion === 'sadness' ? '😢 悲しみ' :
-                               realtimeAnalysis.detailed_analysis.emotion === 'fear' ? '😨 恐れ' :
-                               realtimeAnalysis.detailed_analysis.emotion === 'surprise' ? '😲 驚き' :
-                               realtimeAnalysis.detailed_analysis.emotion === 'disgust' ? '🤢 嫌悪' : '😐 中性'}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {realtimeAnalysis.detailed_analysis.communication_style && (
-                          <div className="bg-white p-2 rounded-lg border">
-                            <div className="text-xs font-medium text-gray-500 mb-1">コミュニケーションスタイル</div>
-                            <div className="text-sm capitalize">
-                              {realtimeAnalysis.detailed_analysis.communication_style === 'formal' ? '🎩 フォーマル' :
-                               realtimeAnalysis.detailed_analysis.communication_style === 'informal' ? '😊 カジュアル' :
-                               realtimeAnalysis.detailed_analysis.communication_style === 'aggressive' ? '⚡ 攻撃的' :
-                               realtimeAnalysis.detailed_analysis.communication_style === 'friendly' ? '🤝 フレンドリー' : '😐 普通'}
+                        {realtimeAnalysis.detailed_analysis.confidential.confidential_detected && (
+                          <div className="bg-orange-50 p-2 rounded-lg border border-orange-200">
+                            <div className="text-xs font-medium text-orange-600 mb-1">機密情報検知</div>
+                            <div className="text-sm text-orange-700">
+                              検出アイテム: {realtimeAnalysis.detailed_analysis.confidential.confidential_items?.length || 0}件
                             </div>
                           </div>
                         )}
@@ -443,29 +439,6 @@ export function ChatRoom({ room }: ChatRoomProps) {
                       </Alert>
                     )}
 
-                    {/* リスク指標 */}
-                    {realtimeAnalysis.detailed_analysis?.risk_indicators && 
-                     realtimeAnalysis.detailed_analysis.risk_indicators.length > 0 && (
-                      <div className="mb-3">
-                        <h4 className="font-semibold text-sm mb-2 text-orange-600">⚠️ リスク指標:</h4>
-                        <div className="space-y-1">
-                          {realtimeAnalysis.detailed_analysis.risk_indicators.map((risk, index) => (
-                            <div key={index} className="bg-orange-50 border border-orange-200 rounded p-2">
-                              <div className="flex items-center justify-between">
-                                <span className="font-medium text-sm">{risk.type}</span>
-                                <Badge variant={risk.severity === 'high' ? 'destructive' : 
-                                              risk.severity === 'medium' ? 'default' : 'secondary'} 
-                                       className="text-xs">
-                                  {risk.severity}
-                                </Badge>
-                              </div>
-                              <p className="text-sm text-gray-600 mt-1">{risk.description}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
                     {/* 提案 */}
                     {realtimeAnalysis.suggestions.length > 0 && (
                       <div className="mb-3">
@@ -480,25 +453,11 @@ export function ChatRoom({ room }: ChatRoomProps) {
                       </div>
                     )}
 
-                    {/* フラグ対象キーワード */}
-                    {realtimeAnalysis.flagged_content.length > 0 && (
-                      <div className="mb-3">
-                        <h4 className="font-semibold text-sm mb-2 text-purple-600">🚩 フラグ対象キーワード:</h4>
-                        <div className="flex flex-wrap gap-1">
-                          {realtimeAnalysis.flagged_content.map((content, index) => (
-                            <Badge key={index} variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-300">
-                              {content}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* コンプライアンス注記 */}
-                    {realtimeAnalysis.compliance_notes && (
+                    {/* 分析サマリー */}
+                    {realtimeAnalysis.summary && (
                       <div className="mt-3 p-3 bg-gray-100 rounded-lg">
-                        <h4 className="font-semibold text-sm mb-1 text-gray-700">📋 詳細分析:</h4>
-                        <p className="text-sm text-gray-600">{realtimeAnalysis.compliance_notes}</p>
+                        <h4 className="font-semibold text-sm mb-1 text-gray-700">📋 分析サマリー:</h4>
+                        <p className="text-sm text-gray-600">{realtimeAnalysis.summary}</p>
                       </div>
                     )}
                   </>

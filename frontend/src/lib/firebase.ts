@@ -43,10 +43,39 @@ export interface ChatMessage {
   analysis?: {
     risk_level: 'SAFE' | 'WARNING' | 'DANGER';
     confidence: number;
+    sentiment: 'positive' | 'neutral' | 'negative';
+    emotion: 'happy' | 'neutral' | 'worried' | 'angry';
     detected_issues: string[];
     suggestions: string[];
-    flagged_content: string[];
+    summary: string;
     processing_time_ms: number;
+    status: 'success' | 'error' | 'fallback';
+    detailed_analysis: {
+      harassment: {
+        harassment_detected?: boolean;
+        harassment_risk_level?: string;
+        harassment_confidence?: number;
+        harassment_items?: Array<{
+          type: string;
+          content: string;
+          severity: string;
+          reason: string;
+        }>;
+        summary?: string;
+      };
+      confidential: {
+        confidential_detected?: boolean;
+        confidential_risk_level?: string;
+        confidential_confidence?: number;
+        confidential_items?: Array<{
+          type: string;
+          content: string;
+          severity: string;
+          reason: string;
+        }>;
+        summary?: string;
+      };
+    };
   };
 }
 
