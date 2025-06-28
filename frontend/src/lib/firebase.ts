@@ -247,7 +247,21 @@ export const sendMessage = async (roomId: string, content: string): Promise<stri
       roomId,
     };
 
+    console.log('📤 Sending message:', {
+      roomId,
+      content,
+      senderId: auth.currentUser.uid,
+      senderName: messageData.senderName,
+      messageData
+    });
+
     const docRef = await addDoc(collection(db, 'messages'), messageData);
+    
+    console.log('✅ Message sent successfully:', {
+      messageId: docRef.id,
+      roomId,
+      senderId: auth.currentUser.uid
+    });
     
     // Update room's last message
     const roomRef = doc(db, 'chatRooms', roomId);
@@ -261,7 +275,7 @@ export const sendMessage = async (roomId: string, content: string): Promise<stri
 
     return docRef.id;
   } catch (error) {
-    console.error('Failed to send message:', error);
+    console.error('❌ Failed to send message:', error);
     throw error;
   }
 };
@@ -286,13 +300,14 @@ export const listenToMessages = (roomId: string, callback: (messages: ChatMessag
     where('roomId', '==', roomId),
     limit(100)
   );
-
   return onSnapshot(messagesQuery, (snapshot) => {
+
     const messages: ChatMessage[] = [];
     snapshot.forEach((doc) => {
+      const messageData = doc.data();
       messages.push({
         id: doc.id,
-        ...doc.data()
+        ...messageData
       } as ChatMessage);
     });
     
@@ -303,6 +318,8 @@ export const listenToMessages = (roomId: string, callback: (messages: ChatMessag
     });
     
     callback(messages);
+  }, (error) => {
+    console.error('❌ Error listening to messages:', error);
   });
 };
 
@@ -310,8 +327,7 @@ export const listenToChatRooms = (userId: string, callback: (rooms: ChatRoom[]) 
   // Temporary fix: Remove orderBy to avoid index requirement
   // TODO: Create composite index for participants + createdAt
   const roomsQuery = query(
-    collection(db, 'chatRooms'),
-    where('participants', 'array-contains', userId)
+    collection(db, 'chatRooms')
   );
 
   return onSnapshot(roomsQuery, (snapshot) => {

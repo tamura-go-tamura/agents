@@ -16,10 +16,14 @@ import os
 from typing import Dict, Any
 import logging
 
-# 設定
-from src.config.settings import Settings
-from src.agents.coordinator import AgentCoordinator
+
+from src.agents.coordinator_simple import (
+    SimpleCoordinator as AgentCoordinator,
+)
 from src.models.message import MessageAnalysisRequest, MessageAnalysisResponse
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ロギング設定
 logging.basicConfig(level=logging.INFO)
@@ -45,7 +49,6 @@ app.add_middleware(
 )
 
 # 設定とAgent初期化
-settings = Settings()
 agent_coordinator: AgentCoordinator = None
 
 
@@ -55,7 +58,7 @@ async def startup_event():
     global agent_coordinator
     try:
         logger.info("Initializing SafeComm ADK Backend...")
-        agent_coordinator = AgentCoordinator(settings)
+        agent_coordinator = AgentCoordinator()
         await agent_coordinator.initialize()
         logger.info("SafeComm ADK Backend initialized successfully!")
     except Exception as e:
@@ -91,10 +94,31 @@ async def analyze_message(request: MessageAnalysisRequest):
             request_type="chat_analysis", data=request.dict()
         )
 
+        logger.info(result)
+
         return MessageAnalysisResponse(**result)
 
     except Exception as e:
         logger.error(f"Message analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/policy-check")
+async def policy_check(request: MessageAnalysisRequest):
+    """ポリシーチェック専用API"""
+    try:
+        logger.info(f"Checking policy compliance for user: {request.user_id}")
+
+        # Agent Coordinatorでポリシーチェック
+        result = await agent_coordinator.route_request(
+            request_type="policy_check", data=request.dict()
+        )
+        logger.info(result)
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Policy check failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -147,17 +171,30 @@ async def preview_message(request: MessageAnalysisRequest):
             request_type="policy_check", data=request.dict()
         )
 
+        # ポリシーチェック結果を解析
+        is_compliant = result.get("compliant", True)
+        violation_detected = result.get("violation_detected", False)
+        severity = result.get("severity", "")
+
         # プレビュー用のレスポンス形式
         preview_response = {
-            "has_warnings": len(result.get("warnings", [])) > 0,
-            "has_violations": len(result.get("violations", [])) > 0,
-            "preview_warnings": result.get("warnings", [])[
-                :2
-            ],  # 最初の2つのみ
-            "preview_violations": result.get("violations", [])[
-                :2
-            ],  # 最初の2つのみ
+            "has_warnings": severity in ["low", "medium"]
+            and violation_detected,
+            "has_violations": severity == "high" and violation_detected,
+            "preview_warnings": (
+                [result.get("explanation", "")]
+                if severity in ["low", "medium"] and violation_detected
+                else []
+            ),
+            "preview_violations": (
+                [result.get("explanation", "")]
+                if severity == "high" and violation_detected
+                else []
+            ),
             "suggestion": _generate_preview_suggestion(result),
+            "compliant": is_compliant,
+            "violation_type": result.get("violation_type", ""),
+            "explanation": result.get("explanation", ""),
         }
 
         return preview_response
@@ -170,17 +207,20 @@ async def preview_message(request: MessageAnalysisRequest):
             "preview_warnings": [],
             "preview_violations": [],
             "suggestion": "メッセージを送信できます",
+            "compliant": True,
+            "violation_type": "",
+            "explanation": f"Error: {str(e)}",
         }
 
 
 def _generate_preview_suggestion(analysis_result: Dict[str, Any]) -> str:
     """プレビュー用の提案メッセージ生成"""
-    violations = analysis_result.get("violations", [])
-    warnings = analysis_result.get("warnings", [])
+    violation_detected = analysis_result.get("violation_detected", False)
+    severity = analysis_result.get("severity", "")
 
-    if violations:
+    if violation_detected and severity == "high":
         return "⚠️ このメッセージには問題が含まれている可能性があります。内容を確認してください。"
-    elif warnings:
+    elif violation_detected and severity in ["low", "medium"]:
         return "💡 より適切な表現を検討することをお勧めします。"
     else:
         return "✅ メッセージを送信できます"

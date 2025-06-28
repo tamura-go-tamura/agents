@@ -75,7 +75,7 @@ export const validateDemoToken = (token: string): DemoUser | null => {
     const user = DEMO_USERS.find(u => u.id === tokenData.user_id);
     return user || null;
     
-  } catch (error) {
+  } catch  {
     return null;
   }
 };

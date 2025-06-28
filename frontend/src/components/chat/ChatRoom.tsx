@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/AuthContext';
-import { Send, AlertTriangle, Shield, ArrowLeft } from 'lucide-react';
+import { Send, AlertTriangle, Shield } from 'lucide-react';
 import { 
   ChatMessage, 
   ChatRoom as ChatRoomType, 
@@ -18,7 +18,6 @@ import { Timestamp } from 'firebase/firestore';
 
 interface ChatRoomProps {
   room: ChatRoomType;
-  onBack: () => void;
 }
 
 interface AnalysisResult {
@@ -46,7 +45,7 @@ interface AnalysisResult {
   };
 }
 
-export function ChatRoom({ room, onBack }: ChatRoomProps) {
+export function ChatRoom({ room }: ChatRoomProps) {
   const { user } = useAuth();
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -157,7 +156,7 @@ export function ChatRoom({ room, onBack }: ChatRoomProps) {
       // Send message to Firestore
       const messageId = await sendMessage(room.id, message);
       
-      // Send to Next.js API Route for analysis
+      // Send to backend for analysis
       const response = await fetch('/api/analyze-message', {
         method: 'POST',
         headers: {
@@ -219,7 +218,6 @@ export function ChatRoom({ room, onBack }: ChatRoomProps) {
     try {
       const idToken = await user.getIdToken();
       
-      // Next.js APIを使用してプレビュー分析
       const response = await fetch('/api/preview-message', {
         method: 'POST',
         headers: {
@@ -229,23 +227,30 @@ export function ChatRoom({ room, onBack }: ChatRoomProps) {
         body: JSON.stringify({
           message: messageText,
           user_id: user.email || user.uid,
-          timestamp: new Date().toISOString()
+          policies: [
+            "No harassment or discriminatory language",
+            "Keep communication professional", 
+            "Protect confidential information",
+            "Be respectful to all team members"
+          ]
         })
       });
 
       if (response.ok) {
-        const result = await response.json();
+        const policyResult = await response.json();
+        
         
         // 構造化されたレスポンスをAnalysisResult形式に変換
         const realtimeResult: AnalysisResult = {
-          risk_level: result.risk_level || 'SAFE',
-          confidence: result.confidence || 0.85,
-          detected_issues: result.detected_issues || [],
-          suggestions: result.suggestions || [],
-          flagged_content: result.flagged_content || [],
-          processing_time_ms: result.processing_time_ms || 100,
-          compliance_notes: result.compliance_notes,
-          detailed_analysis: result.detailed_analysis || {}
+          risk_level: policyResult.violation_detected ? 'DANGER' : 
+                     (policyResult?.detailed_analysis?.risk_indicators?.length > 0 ? 'WARNING' : 'SAFE'),
+          confidence: policyResult.confidence_score || 0.85,
+          detected_issues: policyResult.violation_detected ? [policyResult.explanation] : [],
+          suggestions: policyResult.suggestions || [],
+          flagged_content: policyResult.keywords_detected || [],
+          processing_time_ms: 100,
+          compliance_notes: policyResult.explanation,
+          detailed_analysis: policyResult?.detailed_analysis || {}
         };
         
         setRealtimeAnalysis(realtimeResult);
@@ -293,23 +298,7 @@ export function ChatRoom({ room, onBack }: ChatRoomProps) {
   if (!user) return null;
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b px-6 py-4 flex items-center space-x-4">
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold">{room.name}</h1>
-          {room.description && (
-            <p className="text-sm text-gray-500">{room.description}</p>
-          )}
-        </div>
-        <Badge variant="outline">
-          {room.participants.length} 参加者
-        </Badge>
-      </div>
-
+    <div className="h-full flex flex-col bg-gray-50">
       <div className="flex-1 flex min-h-0">
         {/* Chat Area */}
         <div className="flex-1 flex flex-col min-h-0">
