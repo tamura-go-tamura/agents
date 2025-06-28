@@ -54,77 +54,8 @@ export function ChatRoom({ room }: ChatRoomProps) {
   const [isPreviewAnalyzing, setIsPreviewAnalyzing] = useState(false);
   const [realtimeAnalysis, setRealtimeAnalysis] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const previewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const connectWebSocket = React.useCallback(() => {
-    if (!user) return;
-    
-    // 既に接続中の場合は何もしない
-    if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
-      console.log('WebSocket connection already in progress');
-      return;
-    }
-    
-    // 既存の接続があれば閉じる
-    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
-      wsRef.current.close();
-    }
-    
-    try {
-      console.log('Attempting WebSocket connection to ws://localhost:8080/ws/realtime-analysis');
-      wsRef.current = new WebSocket('ws://localhost:8080/ws/realtime-analysis');
-      
-      wsRef.current.onopen = (event) => {
-        console.log('WebSocket connected for real-time analysis', event);
-      };
-      
-      wsRef.current.onmessage = (event) => {
-        try {
-          console.log('WebSocket message received:', event.data);
-          const analysis: AnalysisResult = JSON.parse(event.data);
-          setRealtimeAnalysis(analysis);
-        } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
-        }
-      };
-      
-      wsRef.current.onerror = (error) => {
-        console.error('WebSocket error details:', {
-          error,
-          readyState: wsRef.current?.readyState,
-          url: wsRef.current?.url
-        });
-      };
-      
-      wsRef.current.onclose = (event) => {
-        console.log('WebSocket disconnected:', {
-          code: event.code,
-          reason: event.reason,
-          wasClean: event.wasClean
-        });
-        
-        // Only retry if not a normal close
-        if (event.code !== 1000 && user) {
-          console.log('Retrying WebSocket connection in 3 seconds...');
-          setTimeout(() => {
-            if (user) { // Check user is still available
-              connectWebSocket();
-            }
-          }, 3000);
-        }
-      };
-    } catch (error) {
-      console.error('Failed to create WebSocket connection:', error);
-      // Retry after error
-      setTimeout(() => {
-        if (user) {
-          connectWebSocket();
-        }
-      }, 3000);
-    }
-  }, [user]);
 
   useEffect(() => {
     if (!room.id) return;
@@ -134,19 +65,12 @@ export function ChatRoom({ room }: ChatRoomProps) {
       setMessages(newMessages);
     });
 
-    // Connect WebSocket for real-time analysis with a small delay
-    const connectTimer = setTimeout(() => {
-      connectWebSocket();
-    }, 100);
+    
     
     return () => {
       unsubscribe();
-      clearTimeout(connectTimer);
-      if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
-        wsRef.current.close(1000, 'Component unmounting');
-      }
     };
-  }, [room.id, connectWebSocket]);
+  }, [room.id, ]);
 
   const handleSendMessage = async () => {
     if (!message.trim() || !user || !room.id) return;
@@ -375,51 +299,18 @@ export function ChatRoom({ room }: ChatRoomProps) {
 
                     {/* 詳細分析情報 */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                      {realtimeAnalysis.sentiment && (
+                      {realtimeAnalysis.detailed_analysis.sentiment && (
                         <div className="bg-white p-2 rounded-lg border">
                           <div className="text-xs font-medium text-gray-500 mb-1">感情</div>
                           <div className="text-sm capitalize">
-                            {realtimeAnalysis.sentiment === 'positive' ? '😊 ポジティブ' :
-                             realtimeAnalysis.sentiment === 'negative' ? '😟 ネガティブ' : '😐 中性'}
+                            {realtimeAnalysis.detailed_analysis.sentiment === 'positive' ? '😊 ポジティブ' :
+                             realtimeAnalysis.detailed_analysis.sentiment === 'negative' ? '😟 ネガティブ' : '😐 中性'}
                           </div>
                         </div>
                       )}
                       
-                      {realtimeAnalysis.emotion && (
-                        <div className="bg-white p-2 rounded-lg border">
-                          <div className="text-xs font-medium text-gray-500 mb-1">感情表現</div>
-                          <div className="text-sm capitalize">
-                            {realtimeAnalysis.emotion === 'happy' ? '😄 楽しい' :
-                             realtimeAnalysis.emotion === 'angry' ? '😡 怒り' :
-                             realtimeAnalysis.emotion === 'worried' ? '� 心配' : '😐 中性'}
-                          </div>
-                        </div>
-                      )}
+                      
                     </div>
-                    
-                    {/* ハラスメント・機密情報の詳細 */}
-                    {(realtimeAnalysis.detailed_analysis.harassment.harassment_detected || 
-                      realtimeAnalysis.detailed_analysis.confidential.confidential_detected) && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                        {realtimeAnalysis.detailed_analysis.harassment.harassment_detected && (
-                          <div className="bg-red-50 p-2 rounded-lg border border-red-200">
-                            <div className="text-xs font-medium text-red-600 mb-1">ハラスメント検知</div>
-                            <div className="text-sm text-red-700">
-                              検出アイテム: {realtimeAnalysis.detailed_analysis.harassment.harassment_items?.length || 0}件
-                            </div>
-                          </div>
-                        )}
-                        
-                        {realtimeAnalysis.detailed_analysis.confidential.confidential_detected && (
-                          <div className="bg-orange-50 p-2 rounded-lg border border-orange-200">
-                            <div className="text-xs font-medium text-orange-600 mb-1">機密情報検知</div>
-                            <div className="text-sm text-orange-700">
-                              検出アイテム: {realtimeAnalysis.detailed_analysis.confidential.confidential_items?.length || 0}件
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
 
                     {/* 検出された問題 */}
                     {realtimeAnalysis.detected_issues.length > 0 && (
@@ -454,10 +345,10 @@ export function ChatRoom({ room }: ChatRoomProps) {
                     )}
 
                     {/* 分析サマリー */}
-                    {realtimeAnalysis.summary && (
+                    {realtimeAnalysis.compliance_notes && (
                       <div className="mt-3 p-3 bg-gray-100 rounded-lg">
                         <h4 className="font-semibold text-sm mb-1 text-gray-700">📋 分析サマリー:</h4>
-                        <p className="text-sm text-gray-600">{realtimeAnalysis.summary}</p>
+                        <p className="text-sm text-gray-600">{realtimeAnalysis.compliance_notes}</p>
                       </div>
                     )}
                   </>

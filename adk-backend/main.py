@@ -52,16 +52,16 @@ class MessageRequest(BaseModel):
 
 
 class MessageResponse(BaseModel):
-    """プロンプトベースマルチエージェント分析レスポンス"""
+    """現在のAnalysisResult形式に対応したメッセージ分析レスポンス"""
 
     risk_level: str
     confidence: float
     detected_issues: List[str]
     suggestions: List[str]
-    flagged_content: List[str] = []
+    flagged_content: List[str]
     processing_time_ms: float
-    compliance_notes: str = ""
-    detailed_analysis: Dict[str, Any] = {}
+    compliance_notes: str
+    detailed_analysis: Dict[str, Any]
 
 
 async def get_or_create_session(user_id: str) -> Session:
@@ -151,16 +151,24 @@ async def analyze_message(request: MessageRequest):
             analysis_result = {
                 "risk_level": "SAFE",
                 "confidence": 0.5,
-                "sentiment": "neutral",
-                "emotion": "neutral",
                 "detected_issues": [],
                 "suggestions": [
                     "プロンプトベース分析結果を取得できませんでした"
                 ],
-                "summary": "フォールバック分析",
+                "flagged_content": [],
                 "processing_time_ms": 100,
-                "status": "fallback",
-                "detailed_analysis": {"harassment": {}, "confidential": {}},
+                "compliance_notes": "フォールバック分析",
+                "detailed_analysis": {
+                    "sentiment": "neutral",
+                    "emotion": "neutral",
+                    "communication_style": "unknown",
+                    "risk_indicators": [],
+                    "policy_details": {
+                        "violation_type": "none",
+                        "severity": "low",
+                        "keywords_detected": [],
+                    },
+                },
             }
 
         logger.info(

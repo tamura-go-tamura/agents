@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
         const errorData = await adkResponse.text();
         console.error('ADK Backend error:', errorData);
         
-        // フォールバック応答（新しいプロンプトベース形式）
+        // フォールバック応答（現在のAnalysisResult形式）
         return NextResponse.json({
           risk_level: 'SAFE',
           confidence: 0.5,
@@ -83,8 +83,17 @@ export async function POST(request: NextRequest) {
           suggestions: ["分析サービスが利用できませんでした"],
           flagged_content: [],
           processing_time_ms: 0,
-          compliance_notes: '',
+          compliance_notes: "分析サービスエラー",
           detailed_analysis: {
+            sentiment: "neutral",
+            emotion: "neutral",
+            communication_style: "unknown",
+            risk_indicators: [],
+            policy_details: {
+              violation_type: "none",
+              severity: "low",
+              keywords_detected: []
+            }
           }
         });
       }
@@ -92,30 +101,55 @@ export async function POST(request: NextRequest) {
       const analysisResult = await adkResponse.json();
       return NextResponse.json(analysisResult);
 
-    } catch (error) {
-        console.error('ADK Backend request failed:', error);
-        
-        // フォールバック応答（新しいプロンプトベース形式）
-       return NextResponse.json({
-          risk_level: 'SAFE',
-          confidence: 0.5,
-          detected_issues: [],
-          suggestions: ["分析サービスが利用できませんでした"],
-          flagged_content: [],
-          processing_time_ms: 0,
-          compliance_notes: '',
-          detailed_analysis: {
+    } catch (backendError) {
+      console.error('ADK Backend connection error:', backendError);
+      
+      // フォールバック応答（現在のAnalysisResult形式）
+      return NextResponse.json({
+        risk_level: 'SAFE',
+        confidence: 0.5,
+        detected_issues: [],
+        suggestions: ["バックエンドに接続できませんでした"],
+        flagged_content: [],
+        processing_time_ms: 0,
+        compliance_notes: "接続エラー",
+        detailed_analysis: {
+          sentiment: "neutral",
+          emotion: "neutral",
+          communication_style: "unknown",
+          risk_indicators: [],
+          policy_details: {
+            violation_type: "none",
+            severity: "low",
+            keywords_detected: []
           }
-        });
-    }} catch  {return NextResponse.json({
-          risk_level: 'SAFE',
-          confidence: 0.5,
-          detected_issues: [],
-          suggestions: ["分析サービスが利用できませんでした"],
-          flagged_content: [],
-          processing_time_ms: 0,
-          compliance_notes: '',
-          detailed_analysis: {
-          }
-        });}}
+        }
+      });
+    }
 
+  } catch (error) {
+    console.error('API error:', error);
+    
+    // エラー時のフォールバック応答（現在のAnalysisResult形式）
+    return NextResponse.json({
+      risk_level: 'SAFE',
+      confidence: 0.5,
+      detected_issues: [],
+      suggestions: ["予期しないエラーが発生しました"],
+      flagged_content: [],
+      processing_time_ms: 0,
+      compliance_notes: "システムエラー",
+      detailed_analysis: {
+        sentiment: "neutral",
+        emotion: "neutral",
+        communication_style: "unknown",
+        risk_indicators: [],
+        policy_details: {
+          violation_type: "none",
+          severity: "low",
+          keywords_detected: []
+        }
+      }
+    });
+  }
+}
