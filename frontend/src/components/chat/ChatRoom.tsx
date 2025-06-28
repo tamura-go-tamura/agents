@@ -28,22 +28,22 @@ interface AnalysisResult {
   suggestions: string[];
   flagged_content: string[];
   processing_time_ms: number;
-}
-
-interface PreviewResult {
-  has_warnings: boolean;
-  has_violations: boolean;
-  preview_warnings: Array<{
-    policy_name: string;
-    warning_type: string;
-    description: string;
-  }>;
-  preview_violations: Array<{
-    policy_name: string;
-    violation_type: string;
-    description: string;
-  }>;
-  suggestion: string;
+  compliance_notes?: string;
+  detailed_analysis?: {
+    sentiment?: string;
+    emotion?: string;
+    communication_style?: string;
+    risk_indicators?: Array<{
+      type: string;
+      description: string;
+      severity: string;
+    }>;
+    policy_details?: {
+      violation_type?: string;
+      severity?: string;
+      keywords_detected?: string[];
+    };
+  };
 }
 
 export function ChatRoom({ room, onBack }: ChatRoomProps) {
@@ -51,7 +51,9 @@ export function ChatRoom({ room, onBack }: ChatRoomProps) {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isPreviewAnalyzing, setIsPreviewAnalyzing] = useState(false);
   const [realtimeAnalysis, setRealtimeAnalysis] = useState<AnalysisResult | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const previewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -207,12 +209,17 @@ export function ChatRoom({ room, onBack }: ChatRoomProps) {
   const performPreviewAnalysis = async (messageText: string) => {
     if (!messageText.trim() || !user) {
       setRealtimeAnalysis(null);
+      setAnalysisError(null);
       return;
     }
+
+    setIsPreviewAnalyzing(true);
+    setAnalysisError(null);
 
     try {
       const idToken = await user.getIdToken();
       
+      // Next.js APIを使用してプレビュー分析
       const response = await fetch('/api/preview-message', {
         method: 'POST',
         headers: {
@@ -227,28 +234,31 @@ export function ChatRoom({ room, onBack }: ChatRoomProps) {
       });
 
       if (response.ok) {
-        const result: PreviewResult = await response.json();
+        const result = await response.json();
         
-        // PreviewResultをAnalysisResult形式に変換
-        const analysisResult: AnalysisResult = {
-          risk_level: result.has_violations ? 'DANGER' : result.has_warnings ? 'WARNING' : 'SAFE',
-          confidence: 0.85, // デフォルト値
-          detected_issues: [
-            ...result.preview_violations.map(v => v.description),
-            ...result.preview_warnings.map(w => w.description)
-          ],
-          suggestions: [result.suggestion],
-          flagged_content: result.preview_violations.map(v => v.violation_type),
-          processing_time_ms: 100 // デフォルト値
+        // 構造化されたレスポンスをAnalysisResult形式に変換
+        const realtimeResult: AnalysisResult = {
+          risk_level: result.risk_level || 'SAFE',
+          confidence: result.confidence || 0.85,
+          detected_issues: result.detected_issues || [],
+          suggestions: result.suggestions || [],
+          flagged_content: result.flagged_content || [],
+          processing_time_ms: result.processing_time_ms || 100,
+          compliance_notes: result.compliance_notes,
+          detailed_analysis: result.detailed_analysis || {}
         };
         
-        setRealtimeAnalysis(analysisResult);
+        setRealtimeAnalysis(realtimeResult);
       } else {
+        setAnalysisError(`分析に失敗しました: ${response.status}`);
         setRealtimeAnalysis(null);
       }
     } catch (error) {
       console.error('Preview analysis failed:', error);
+      setAnalysisError('ネットワークエラーが発生しました');
       setRealtimeAnalysis(null);
+    } finally {
+      setIsPreviewAnalyzing(false);
     }
   };
 
@@ -348,59 +358,162 @@ export function ChatRoom({ room, onBack }: ChatRoomProps) {
           {/* Message Input - 画面下部固定 */}
           <div className="flex-shrink-0 bg-white border-t">
             {/* リアルタイム分析表示 */}
-            {realtimeAnalysis && (
-              <div className="p-4 border-b bg-gray-50">
-                <div className="flex items-center space-x-2 mb-2">
-                  {getRiskIcon(realtimeAnalysis.risk_level)}
-                  <Badge variant={getRiskBadgeVariant(realtimeAnalysis.risk_level)}>
-                    {realtimeAnalysis.risk_level}
-                  </Badge>
-                  <span className="text-sm text-gray-500">
-                    信頼度: {Math.round(realtimeAnalysis.confidence * 100)}%
-                  </span>
-                </div>
+            {(isPreviewAnalyzing || realtimeAnalysis || analysisError) && (
+              <div className="p-4 border-b bg-gradient-to-r from-gray-50 to-blue-50">
+                {/* ローディング状態 */}
+                {isPreviewAnalyzing && (
+                  <div className="flex items-center space-x-2 mb-3">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    <span className="text-sm text-gray-600">分析中...</span>
+                  </div>
+                )}
 
-                {realtimeAnalysis.detected_issues.length > 0 && (
-                  <Alert className="mb-2">
+                {/* エラー表示 */}
+                {analysisError && (
+                  <Alert className="mb-3" variant="destructive">
                     <AlertTriangle className="h-4 w-4" />
-                    <AlertDescription>
-                      <strong>検出された問題:</strong>
-                      <ul className="mt-1 text-sm">
-                        {realtimeAnalysis.detected_issues.map((issue, index) => (
-                          <li key={index}>• {issue}</li>
-                        ))}
-                      </ul>
-                    </AlertDescription>
+                    <AlertDescription>{analysisError}</AlertDescription>
                   </Alert>
                 )}
 
-                {realtimeAnalysis.suggestions.length > 0 && (
-                  <div className="mb-2">
-                    <h4 className="font-semibold text-sm mb-1">提案:</h4>
-                    <ul className="text-sm space-y-1">
-                      {realtimeAnalysis.suggestions.map((suggestion, index) => (
-                        <li key={index} className="text-blue-600">• {suggestion}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {realtimeAnalysis.flagged_content.length > 0 && (
-                  <div className="mb-2">
-                    <h4 className="font-semibold text-sm mb-1">フラグ対象:</h4>
-                    <div className="flex flex-wrap gap-1">
-                      {realtimeAnalysis.flagged_content.map((content, index) => (
-                        <Badge key={index} variant="outline" className="text-xs">
-                          {content}
+                {/* 分析結果 */}
+                {realtimeAnalysis && !isPreviewAnalyzing && (
+                  <>
+                    {/* 基本情報 */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center space-x-2">
+                        {getRiskIcon(realtimeAnalysis.risk_level)}
+                        <Badge variant={getRiskBadgeVariant(realtimeAnalysis.risk_level)} className="font-medium">
+                          {realtimeAnalysis.risk_level}
                         </Badge>
-                      ))}
+                        <span className="text-sm text-gray-600">
+                          信頼度: {Math.round(realtimeAnalysis.confidence * 100)}%
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {realtimeAnalysis.processing_time_ms}ms
+                      </div>
                     </div>
-                  </div>
-                )}
 
-                <div className="text-xs text-gray-500">
-                  処理時間: {realtimeAnalysis.processing_time_ms}ms
-                </div>
+                    {/* 詳細分析情報 */}
+                    {realtimeAnalysis.detailed_analysis && (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                        {realtimeAnalysis.detailed_analysis.sentiment && (
+                          <div className="bg-white p-2 rounded-lg border">
+                            <div className="text-xs font-medium text-gray-500 mb-1">感情</div>
+                            <div className="text-sm capitalize">
+                              {realtimeAnalysis.detailed_analysis.sentiment === 'positive' ? '😊 ポジティブ' :
+                               realtimeAnalysis.detailed_analysis.sentiment === 'negative' ? '😟 ネガティブ' : '😐 中性'}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {realtimeAnalysis.detailed_analysis.emotion && (
+                          <div className="bg-white p-2 rounded-lg border">
+                            <div className="text-xs font-medium text-gray-500 mb-1">感情表現</div>
+                            <div className="text-sm capitalize">
+                              {realtimeAnalysis.detailed_analysis.emotion === 'joy' ? '😄 喜び' :
+                               realtimeAnalysis.detailed_analysis.emotion === 'anger' ? '😡 怒り' :
+                               realtimeAnalysis.detailed_analysis.emotion === 'sadness' ? '😢 悲しみ' :
+                               realtimeAnalysis.detailed_analysis.emotion === 'fear' ? '😨 恐れ' :
+                               realtimeAnalysis.detailed_analysis.emotion === 'surprise' ? '😲 驚き' :
+                               realtimeAnalysis.detailed_analysis.emotion === 'disgust' ? '🤢 嫌悪' : '😐 中性'}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {realtimeAnalysis.detailed_analysis.communication_style && (
+                          <div className="bg-white p-2 rounded-lg border">
+                            <div className="text-xs font-medium text-gray-500 mb-1">コミュニケーションスタイル</div>
+                            <div className="text-sm capitalize">
+                              {realtimeAnalysis.detailed_analysis.communication_style === 'formal' ? '🎩 フォーマル' :
+                               realtimeAnalysis.detailed_analysis.communication_style === 'informal' ? '😊 カジュアル' :
+                               realtimeAnalysis.detailed_analysis.communication_style === 'aggressive' ? '⚡ 攻撃的' :
+                               realtimeAnalysis.detailed_analysis.communication_style === 'friendly' ? '🤝 フレンドリー' : '😐 普通'}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 検出された問題 */}
+                    {realtimeAnalysis.detected_issues.length > 0 && (
+                      <Alert className="mb-3">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                          <strong className="text-red-600">検出された問題:</strong>
+                          <ul className="mt-2 space-y-1">
+                            {realtimeAnalysis.detected_issues.map((issue, index) => (
+                              <li key={index} className="flex items-start">
+                                <span className="text-red-500 mr-2">•</span>
+                                <span className="text-sm">{issue}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* リスク指標 */}
+                    {realtimeAnalysis.detailed_analysis?.risk_indicators && 
+                     realtimeAnalysis.detailed_analysis.risk_indicators.length > 0 && (
+                      <div className="mb-3">
+                        <h4 className="font-semibold text-sm mb-2 text-orange-600">⚠️ リスク指標:</h4>
+                        <div className="space-y-1">
+                          {realtimeAnalysis.detailed_analysis.risk_indicators.map((risk, index) => (
+                            <div key={index} className="bg-orange-50 border border-orange-200 rounded p-2">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-sm">{risk.type}</span>
+                                <Badge variant={risk.severity === 'high' ? 'destructive' : 
+                                              risk.severity === 'medium' ? 'default' : 'secondary'} 
+                                       className="text-xs">
+                                  {risk.severity}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-gray-600 mt-1">{risk.description}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 提案 */}
+                    {realtimeAnalysis.suggestions.length > 0 && (
+                      <div className="mb-3">
+                        <h4 className="font-semibold text-sm mb-2 text-blue-600">💡 改善提案:</h4>
+                        <div className="space-y-2">
+                          {realtimeAnalysis.suggestions.map((suggestion, index) => (
+                            <div key={index} className="bg-blue-50 border border-blue-200 rounded p-2">
+                              <span className="text-sm text-blue-800">{suggestion}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* フラグ対象キーワード */}
+                    {realtimeAnalysis.flagged_content.length > 0 && (
+                      <div className="mb-3">
+                        <h4 className="font-semibold text-sm mb-2 text-purple-600">🚩 フラグ対象キーワード:</h4>
+                        <div className="flex flex-wrap gap-1">
+                          {realtimeAnalysis.flagged_content.map((content, index) => (
+                            <Badge key={index} variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-300">
+                              {content}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* コンプライアンス注記 */}
+                    {realtimeAnalysis.compliance_notes && (
+                      <div className="mt-3 p-3 bg-gray-100 rounded-lg">
+                        <h4 className="font-semibold text-sm mb-1 text-gray-700">📋 詳細分析:</h4>
+                        <p className="text-sm text-gray-600">{realtimeAnalysis.compliance_notes}</p>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
             

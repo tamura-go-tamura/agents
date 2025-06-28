@@ -55,43 +55,90 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ADKバックエンドのプレビューエンドポイントに転送
-    const adkResponse = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/preview-message`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      }
-    );
+    // ADKバックエンドの複数エンドポイントを呼び出し
+    const adkBackendUrl = process.env.ADK_BACKEND_URL || 'http://localhost:8080';
+    
+    try {
+      // ポリシーチェックとチャット分析を並行実行
+      const [policyResponse, analysisResponse] = await Promise.all([
+        fetch(`${adkBackendUrl}/api/policy-check`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: body.message,
+            user_id: body.user_id,
+            policies: [
+              "No harassment or discriminatory language",
+              "Keep communication professional", 
+              "Protect confidential information",
+              "Be respectful to all team members"
+            ]
+          }),
+        }),
+        fetch(`${adkBackendUrl}/api/analyze-message`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        })
+      ]);
 
-    if (!adkResponse.ok) {
-      const errorData = await adkResponse.text();
-      console.error('ADK Backend preview error:', errorData);
-      // エラー時はフォールバック応答
+      let policyResult = null;
+      let analysisResult = null;
+
+      if (policyResponse.ok) {
+        policyResult = await policyResponse.json();
+      }
+
+      if (analysisResponse.ok) {
+        analysisResult = await analysisResponse.json();
+      }
+
+      // 構造化されたレスポンスを作成
+      const structuredResponse = {
+        risk_level: policyResult?.violation_detected ? 'DANGER' : 
+                   (analysisResult?.detailed_analysis?.risk_indicators?.length > 0 ? 'WARNING' : 'SAFE'),
+        confidence: policyResult?.confidence_score || 0.85,
+        detected_issues: policyResult?.violation_detected ? [policyResult.explanation] : [],
+        suggestions: policyResult?.suggestions || [],
+        flagged_content: policyResult?.keywords_detected || [],
+        processing_time_ms: 100,
+        compliance_notes: policyResult?.explanation,
+        detailed_analysis: analysisResult?.detailed_analysis || {}
+      };
+
+      return NextResponse.json(structuredResponse);
+
+    } catch (backendError) {
+      console.error('ADK Backend error:', backendError);
+      // フォールバック応答
       return NextResponse.json({
-        has_warnings: false,
-        has_violations: false,
-        preview_warnings: [],
-        preview_violations: [],
-        suggestion: "メッセージを送信できます"
+        risk_level: 'SAFE',
+        confidence: 0.5,
+        detected_issues: [],
+        suggestions: ["バックエンドエラーのため分析できませんでした"],
+        flagged_content: [],
+        processing_time_ms: 0,
+        compliance_notes: "分析サービスが利用できません",
+        detailed_analysis: {}
       });
     }
-
-    const previewResult = await adkResponse.json();
-    return NextResponse.json(previewResult);
 
   } catch (error) {
     console.error('Preview API error:', error);
     // エラー時はフォールバック応答
     return NextResponse.json({
-      has_warnings: false,
-      has_violations: false,
-      preview_warnings: [],
-      preview_violations: [],
-      suggestion: "メッセージを送信できます"
+      risk_level: 'SAFE',
+      confidence: 0.5,
+      detected_issues: [],
+      suggestions: ["エラーのため分析できませんでした"],
+      flagged_content: [],
+      processing_time_ms: 0,
+      compliance_notes: "分析中にエラーが発生しました",
+      detailed_analysis: {}
     });
   }
 }
