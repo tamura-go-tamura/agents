@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Mic, MicOff, Zap } from 'lucide-react'
@@ -85,9 +86,6 @@ export default function AudioAnalysis() {
       }
       
       audioSourcesRef.current.push(source)
-      
-      console.log(`音声チャンク再生: ${numberOfFrames}サンプル, 開始時刻: ${startTime.toFixed(3)}s`)
-      
     } catch (error) {
       console.error('音声チャンク再生エラー:', error)
     }
@@ -138,7 +136,6 @@ export default function AudioAnalysis() {
         break
       
       case 'ai_audio_stream':
-        console.log('AI音声ストリーム受信:', data.chunk_size, 'bytes')
         if (data.audio_data) {
           playAudioChunk(data.audio_data) // 音声チャンクを即座に再生
         }
@@ -369,6 +366,7 @@ export default function AudioAnalysis() {
         type: 'stop_session'
       }))
     }
+    disconnectWebSocket()
     
     setIsListening(false)
     setIsWarning(false)
@@ -391,6 +389,17 @@ export default function AudioAnalysis() {
         {/* 左側：音声監視パネル */}
         <Card className="w-full bg-white/80 border-slate-200/50 backdrop-blur-sm shadow-xl shadow-blue-100/20">
           <CardContent className="p-8 h-full flex flex-col">
+            {/* ヘッダー部分 */}
+            <div className="flex items-center justify-center mb-6">
+              <div className="flex items-center space-x-3">
+                <Image src="/logo.png" alt="SafeComm AI" width={32} height={32} className="h-8 w-8" />
+                <div className="text-center">
+                  <h2 className="text-xl font-semibold text-gray-800">音声監視システム</h2>
+                  <p className="text-sm text-gray-600">AIによるリアルタイム分析</p>
+                </div>
+              </div>
+            </div>
+            
             {/* 上部：メインUI（固定レイアウト） */}
             <div className="flex-1 flex flex-col justify-center min-h-0">
               <div className="text-center">

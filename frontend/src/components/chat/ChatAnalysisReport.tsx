@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -170,9 +171,12 @@ export default function ChatAnalysisReport({ onBack, chatMessages }: ChatReportP
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 戻る
               </Button>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">チャット分析レポート</h1>
-                <p className="text-gray-600 mt-1">AIによるコンプライアンス・機密情報漏洩の包括分析</p>
+              <div className="flex items-center space-x-3">
+                <Image src="/logo.png" alt="SafeComm AI" width={36} height={36} className="h-9 w-9" />
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-900">チャット分析レポート</h1>
+                  <p className="text-gray-600 mt-1">AIによるコンプライアンス・機密情報漏洩の包括分析</p>
+                </div>
               </div>
             </div>
           </div>

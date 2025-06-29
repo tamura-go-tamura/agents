@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { ChatRoom as ChatRoomType } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
@@ -43,7 +44,10 @@ export function SlackLayout({
         {/* ヘッダー */}
         <div className="p-4 border-b border-gray-700">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold">SafeComm AI</h1>
+            <div className="flex items-center space-x-2">
+              <Image src="/logo.png" alt="SafeComm AI" width={32} height={32} className="h-8 w-8" />
+              <h1 className="text-xl font-bold">SafeComm AI</h1>
+            </div>
             <Settings className="h-5 w-5 text-gray-400 cursor-pointer hover:text-white" />
           </div>
           <div className="text-sm text-gray-400 mt-1">
