@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any, List
 from dotenv import load_dotenv
+from websockets.exceptions import ConnectionClosedOK
 
 from google.adk.runners import InMemoryRunner
 from google.adk.sessions import Session
@@ -227,8 +228,10 @@ async def websocket_audio_analysis(websocket: WebSocket):
         config = types.LiveConnectConfig(
             response_modalities=["AUDIO"],  # 音声レスポンスを有効化
             system_instruction="""
-あなたは会話をフレンドリーに監視すユーモア溢れる関西人です。
+あなたは、会社で上司と部下の1on1の様子をフレンドリーに監視する、ユーモア溢れる関西人です。
+いざとゆう時にしか発言しません.
 ユーザーの発言を聞いて、危険な発言を検出した場合は即座に雰囲気を和ませながら、指摘してください。
+発言回数は最小限にとどめてください。
 
 【介入条件】
 - ハラスメント、脅迫、攻撃的な発言
@@ -240,7 +243,7 @@ async def websocket_audio_analysis(websocket: WebSocket):
 危険な発言を検出した場合は、どんな言葉がだめだったかを挙げるなどして、
 オリジナリティあふれる関西弁でお答えください。
 
-通常時は特に応答する必要はありません。
+特に問題がなければ、応答する必要はありません。
 """,
         )
 
@@ -251,38 +254,26 @@ async def websocket_audio_analysis(websocket: WebSocket):
 
             # Live APIからのレスポンスを受信する並行タスクを開始
             async def handle_live_api_responses():
-                import wave
-
                 while True:
-                    wf = wave.open("saved_audio/audio.wav", "wb")
-                    wf.setnchannels(1)
-                    wf.setsampwidth(2)
-                    wf.setframerate(24000)  # Output is 24kHz
-                    audio_chunks = []  # 音声データを蓄積
-
                     try:
                         async for response in genai_session.receive():
                             if hasattr(response, "data") and response.data:
-                                wf.writeframes(response.data)
-                                audio_chunks.append(response.data)
-                    finally:
-                        wf.close()
-
-                        # 蓄積した音声データを結合してフロントエンドに送信
-                        if audio_chunks:
-                            combined_audio = b"".join(audio_chunks)
-                            audio_base64 = base64.b64encode(
-                                combined_audio
-                            ).decode("utf-8")
-                            await websocket.send_json(
-                                {
-                                    "type": "ai_audio_response",
-                                    "audio_data": audio_base64,
-                                }
-                            )
-                            logger.info(
-                                f"結合音声データ送信: {len(combined_audio)} bytes"
-                            )
+                                # 音声データをリアルタイムでストリーミング送信
+                                audio_base64 = base64.b64encode(
+                                    response.data
+                                ).decode("utf-8")
+                                await websocket.send_json(
+                                    {
+                                        "type": "ai_audio_stream",
+                                        "audio_data": audio_base64,
+                                        "chunk_size": len(response.data),
+                                    }
+                                )
+                                logger.debug(
+                                    f"音声チャンク送信: {len(response.data)} bytes"
+                                )
+                    except Exception as e:
+                        logger.error(f"Live API レスポンス処理エラー: {e}")
 
             response_task = asyncio.create_task(handle_live_api_responses())
 
@@ -370,6 +361,8 @@ async def websocket_audio_analysis(websocket: WebSocket):
 
     except WebSocketDisconnect:
         logger.info("WebSocket接続が切断されました")
+    except ConnectionClosedOK:
+        logger.info("WebSocket接続が正常に終了しました")
     except Exception as e:
         logger.error(f"WebSocketエラー: {e}")
         try:
