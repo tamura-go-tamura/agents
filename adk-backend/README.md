@@ -1,4 +1,4 @@
-# SafeComm ADK Backend - シンプル構成
+# チョットマッタAI ADK Backend - シンプル構成
 
 ## 📁 ディレクトリ構造
 

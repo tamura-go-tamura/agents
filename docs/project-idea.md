@@ -1,4 +1,4 @@
-# SafeComm - AI監視型コミュニケーション保護システム
+# チョットマッタAI - AI監視型コミュニケーション保護システム
 
 ## 🎯 Google Cloud AI**: Agent Development Kit (ADK) ⭐️, Gemini API in Vertex AI, Live API
 

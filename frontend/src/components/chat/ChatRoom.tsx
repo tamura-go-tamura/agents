@@ -316,20 +316,6 @@ export function ChatRoom({ room, isAnalysisMode }: ChatRoomProps) {
                       </div>
                     </div>
 
-                    {/* 詳細分析情報 */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                      {realtimeAnalysis.detailed_analysis.sentiment && (
-                        <div className="bg-white p-2 rounded-lg border">
-                          <div className="text-xs font-medium text-gray-500 mb-1">感情</div>
-                          <div className="text-sm capitalize">
-                            {realtimeAnalysis.detailed_analysis.sentiment === 'positive' ? '😊 ポジティブ' :
-                             realtimeAnalysis.detailed_analysis.sentiment === 'negative' ? '😟 ネガティブ' : '😐 中性'}
-                          </div>
-                        </div>
-                      )}
-                      
-                      
-                    </div>
 
                     {/* 検出された問題 */}
                     {realtimeAnalysis.detected_issues.length > 0 && (

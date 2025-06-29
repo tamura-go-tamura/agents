@@ -1,4 +1,4 @@
-# SafeComm AI - Vertex AI Multimodal Live API 実装
+# チョットマッタ AI - Vertex AI Multimodal Live API 実装
 
 このプロジェクトは、Google Cloud Vertex AI Multimodal Live APIを使用したリアルタイム音声分析システムです。
 

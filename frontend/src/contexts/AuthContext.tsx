@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
-import { onAuthStateChange, createDemoRooms, logout } from '@/lib/firebase';
+import { onAuthStateChange, logout } from '@/lib/firebase';
 
 interface AuthContextType {
   user: User | null;
@@ -21,10 +21,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(user);
       setLoading(false);
       
-      // Create demo rooms for new users
-      if (user) {
-        await createDemoRooms();
-      }
     });
 
     return () => unsubscribe();

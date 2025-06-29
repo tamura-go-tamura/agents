@@ -1,11 +1,11 @@
 /**
- * Firebase configuration for SafeComm AI Demo
+ * Firebase configuration for チョットマッタAI Demo
  * Google Cloud Hackathon 2024
  */
 
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, doc, setDoc, getDoc, where, limit, Timestamp, QuerySnapshot } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, doc, setDoc, getDoc, where, limit, Timestamp } from 'firebase/firestore';
 
 // Firebase configuration (デモ用設定)
 const firebaseConfig = {
@@ -371,35 +371,6 @@ export const onAuthStateChange = (callback: (user: User | null) => void): (() =>
   return onAuthStateChanged(auth, callback);
 };
 
-// Demo data creation
-export const createDemoRooms = async (): Promise<void> => {
-  if (!auth.currentUser) return;
-
-  try {
-    // Check if user already has rooms
-    const roomsQuery = query(
-      collection(db, 'chatRooms'),
-      where('participants', 'array-contains', auth.currentUser.uid),
-      limit(1)
-    );
-    
-    const snapshot = await new Promise<QuerySnapshot>((resolve) => {
-      const unsubscribe = onSnapshot(roomsQuery, (snapshot) => {
-        unsubscribe();
-        resolve(snapshot);
-      });
-    });
-
-    if (snapshot.empty) {
-      // Create initial rooms for new users
-      await createChatRoom('一般チャット', 'SafeComm AI デモ用一般チャットルーム');
-      await createChatRoom('開発チーム', '開発プロジェクトの進捗確認用');
-      await createChatRoom('営業部', '営業活動・顧客情報共有用');
-    }
-  } catch (error) {
-    console.error('Failed to create demo rooms:', error);
-  }
-};
 
 // Configuration test function
 export const testFirebaseConfig = async (): Promise<{

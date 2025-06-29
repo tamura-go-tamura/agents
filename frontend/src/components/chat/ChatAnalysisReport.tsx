@@ -612,7 +612,7 @@ export default function ChatAnalysisReport({ onBack, chatMessages }: ChatReportP
           <div className="flex items-center justify-center space-x-4">
             <span>分析処理時間: {report.processing_time_ms.toFixed(1)}ms</span>
             <span>•</span>
-            <span>AI分析エンジン: SafeComm v1.0</span>
+            <span>AI分析エンジン: チョットマッタAI v1.0</span>
           </div>
         </div>
       </div>

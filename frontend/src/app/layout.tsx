@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SafeComm AI - 通信監視システム",
-  description: "Google Cloud ADK を使用したAI通信監視システム - Google Cloud Hackathon 2024",
+  title: "チョットマッタ AI",
+  description: "Google Cloud ADK を使用したAIコミュニケーション監視システム",
   icons: {
     icon: "/logo.png",
     shortcut: "/logo.png",

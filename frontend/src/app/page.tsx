@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { LoginForm } from '@/components/auth/UserSelect';
 import { SlackLayout } from '@/components/layout/SlackLayout';

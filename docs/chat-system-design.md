@@ -2,7 +2,7 @@
 
 ## 🎯 概要
 
-SafeCommのチャット機能は、リアルタイムでモラハラ・機密情報漏洩リスクを検知し、予防的介入を行う社内コミュニケーションシステムです。
+チョットマッタAIのチャット機能は、リアルタイムでモラハラ・機密情報漏洩リスクを検知し、予防的介入を行う社内コミュニケーションシステムです。
 
 ## 🏗️ システム構成
 
@@ -269,7 +269,7 @@ const DemoLogin = () => {
     <div className="min-h-screen flex items-center justify-center">
       <Card className="w-96">
         <CardHeader>
-          <CardTitle>SafeComm Demo</CardTitle>
+          <CardTitle>チョットマッタ Demo</CardTitle>
           <CardDescription>ユーザーを選択してください</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

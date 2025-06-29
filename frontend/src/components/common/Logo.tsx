@@ -32,7 +32,7 @@ export function Logo({
       />
       {showText && (
         <span className={cn("font-semibold text-gray-800", textSizeClasses[textSize])}>
-          SafeComm AI
+          チョットマッタ AI
         </span>
       )}
     </div>

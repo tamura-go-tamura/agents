@@ -316,7 +316,7 @@ import asyncio
 from src.agents.chat_monitor_agent import ChatMonitorAgent
 from src.models.message import MessageAnalysisRequest, MessageAnalysisResponse
 
-app = FastAPI(title="SafeComm Chat Monitor API")
+app = FastAPI(title="チョットマッタ Chat Monitor API")
 
 # CORS設定
 app.add_middleware(

@@ -36,7 +36,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="SafeComm ADK API", version="1.0.0")
+app = FastAPI(title="チョットマッタ AI ADK API", version="1.0.0")
 
 # CORS設定
 app.add_middleware(
@@ -127,7 +127,7 @@ async def get_or_create_session(user_id: str) -> Session:
 @app.get("/health")
 async def health_check():
     """ヘルスチェック"""
-    return {"status": "healthy", "service": "SafeComm ADK API"}
+    return {"status": "healthy", "service": "チョットマッタAI ADK API"}
 
 
 @app.post("/api/analyze-message", response_model=MessageResponse)
@@ -580,7 +580,7 @@ async def analyze_chat(request: ChatAnalysisRequest):
 if __name__ == "__main__":
     import uvicorn
 
-    logger.info("SafeComm統合APIサーバーを起動しています...")
+    logger.info("チョットマッタAI統合APIサーバーを起動しています...")
     logger.info("- テキスト分析: POST /api/analyze-message")
     logger.info("- リアルタイム音声分析: WebSocket /ws/audio-analysis")
     logger.info("- チャット分析: POST /api/analyze-chat")

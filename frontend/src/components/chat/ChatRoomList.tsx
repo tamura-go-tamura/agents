@@ -95,8 +95,8 @@ export function ChatRoomList({ onRoomSelect }: ChatRoomListProps) {
       <div className="bg-white border-b px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold">SafeComm AI</h1>
-            <p className="text-sm text-gray-500">通信監視システム</p>
+            <h1 className="text-xl font-bold">チョットマッタ AI</h1>
+            <p className="text-sm text-gray-500">コミュニケーションガードレールシステム</p>
           </div>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
@@ -238,7 +238,7 @@ export function ChatRoomList({ onRoomSelect }: ChatRoomListProps) {
                   チャットルームがありません
                 </h3>
                 <p className="text-gray-500 mb-4">
-                  新しいチャットルームを作成して、SafeComm AI の通信監視機能を体験してください。
+                  新しいチャットルームを作成して、チョットマッタ AI のガードレール機能を体験してください。
                 </p>
                 <Button onClick={() => setShowCreateRoom(true)}>
                   最初のルームを作成

@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { ChatRoom as ChatRoomType } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
-import { Plus, Hash, Users, Settings, MessageSquare, Mic, FileText } from 'lucide-react';
+import { Plus, Hash, MessageSquare, Mic, FileText } from 'lucide-react';
 
 interface SlackLayoutProps {
   children: React.ReactNode;
@@ -46,9 +46,8 @@ export function SlackLayout({
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Image src="/logo.png" alt="SafeComm AI" width={32} height={32} className="h-8 w-8" />
-              <h1 className="text-xl font-bold">SafeComm AI</h1>
+              <h1 className="text-xl font-bold">チョットマッタAI</h1>
             </div>
-            <Settings className="h-5 w-5 text-gray-400 cursor-pointer hover:text-white" />
           </div>
           <div className="text-sm text-gray-400 mt-1">
             {user?.email || user?.displayName}
@@ -230,7 +229,7 @@ export function SlackLayout({
             <div className="text-center">
               <MessageSquare className="h-16 w-16 text-gray-400 mx-auto mb-4" />
               <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-                SafeComm AIへようこそ
+                チョットマッタ AIへようこそ
               </h2>
               <p className="text-gray-600 mb-6 max-w-md">
                 左側のサイドバーからチャットルームや音声分析モードを選択してください。

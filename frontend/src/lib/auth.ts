@@ -1,5 +1,5 @@
 /**
- * Authentication utilities for SafeComm demo
+ * Authentication utilities for チョットマッタAI demo
  * Demo user system for Google Cloud Hackathon 2024
  */
 
