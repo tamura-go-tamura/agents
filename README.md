@@ -7,6 +7,11 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688.svg)](https://fastapi.tiangolo.com/)
 [![Vertex AI](https://img.shields.io/badge/Vertex%20AI-Live%20API-4285f4.svg)](https://cloud.google.com/vertex-ai)
 
+
+## アーキテクチャ
+
+![アーキテクチャ](./architecture.drawio.svg)
+
 ## 🌟 機能概要
 
 - 🎤 **リアルタイム音声分析**: Vertex AI Multimodal Live APIによる高精度な音声解析

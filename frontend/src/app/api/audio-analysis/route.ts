@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 
 // 音声分析セッション設定を取得するAPI
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     // バックエンドのヘルスチェック
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080'
@@ -20,10 +20,14 @@ export async function GET() {
       )
     }
 
-    // WebSocket設定を返す
+    const url = new URL(request.url)
+    console.log('WebSocket URL:', url.host);
+    
+
+    // WebSocket設定を返す（nginx構成前提）
     return new Response(
       JSON.stringify({ 
-        websocket_url: process.env.BACKEND_WS_URL || 'ws://localhost:8080/ws/audio-analysis',
+        websocket_url: process.env.BACKEND_WS_URL,
         session_config: {
           sample_rate: 16000,
           chunk_size: 4096,
@@ -67,7 +71,7 @@ export async function POST(request: NextRequest) {
     // WebSocket接続情報を返す
     return new Response(
       JSON.stringify({
-        websocket_url: process.env.BACKEND_WS_URL || 'ws://localhost:8080/ws/audio-analysis',
+        websocket_url: process.env.BACKEND_WS_URL,
         session_config: {
           sample_rate: 16000,
           chunk_size: 4096,

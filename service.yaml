@@ -30,7 +30,7 @@ spec:
         image: asia-northeast1-docker.pkg.dev/llm-dx-test-387511/chottomatte/app:latest
         ports:
         - name: http1
-          containerPort: 3000
+          containerPort: 3001 # nginxがリッスンするポート
         env:
         - name: NODE_ENV
           value: "production"
@@ -40,10 +40,12 @@ spec:
           value: "us-central1"
         - name: GOOGLE_GENAI_USE_VERTEXAI
           value: "True"
+        - name: BACKEND_WS_URL
+          value: "dummy"  # nginx経由のWebSocket URL
         - name: BACKEND_PORT
           value: "8080"
         - name: FRONTEND_PORT
-          value: "3000"
+          value: "3000"  # Next.js internal port
         resources:
           limits:
             cpu: "2000m"
@@ -51,7 +53,7 @@ spec:
         startupProbe:
           httpGet:
             path: /
-            port: 3000
+            port: 3001
           initialDelaySeconds: 30
           timeoutSeconds: 3
           periodSeconds: 10
@@ -59,7 +61,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /
-            port: 3000
+            port: 3001
           initialDelaySeconds: 60
           timeoutSeconds: 3
           periodSeconds: 30
