@@ -9,3 +9,9 @@ adk-python
 
 # Google Generative AI
 google-generativeai
+
+# Vertex AI Multimodal Live API
+google-genai
+websockets>=11.0
+asyncio
+numpy

@@ -1,22 +1,312 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Mic, MicOff, Volume2, Zap, Activity, FileText } from 'lucide-react'
+import { Mic, MicOff, Zap, FileText } from 'lucide-react'
+
+// WebSocket接続の状態管理
+interface ConnectionState {
+  isConnected: boolean
+  isConnecting: boolean
+  error: string | null
+}
+
+// リアルタイム分析結果
+interface AnalysisResult {
+  risk_level: 'SAFE' | 'WARNING' | 'DANGER'
+  confidence: number
+  detected_issues: string[]
+  intervention_needed: boolean
+  timestamp: number
+}
+
+// 転写結果
+interface TranscriptionResult {
+  source: 'user' | 'ai'
+  text: string
+  timestamp: number
+}
 
 export default function AudioAnalysis() {
   const [isListening, setIsListening] = useState(false)
   const [isWarning, setIsWarning] = useState(false)
   const [slimeShape, setSlimeShape] = useState({ scale: 1, rotation: 0, borderRadius: '50%' })
-  const [transcript, setTranscript] = useState<string[]>([
-    '音声監視システムが開始されました。',
-    '現在の時刻: ' + new Date().toLocaleTimeString(),
-    'AI による音声分析を実行中...'
-  ])
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const [connectionState, setConnectionState] = useState<ConnectionState>({
+    isConnected: false,
+    isConnecting: false,
+    error: null
+  })
+  const [transcript, setTranscript] = useState<TranscriptionResult[]>([])
+  const [lastAnalysis, setLastAnalysis] = useState<AnalysisResult | null>(null)
+  
+  // Refs
   const streamRef = useRef<MediaStream | null>(null)
   const animationRef = useRef<number | null>(null)
+  const websocketRef = useRef<WebSocket | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const processorRef = useRef<ScriptProcessorNode | null>(null)
+  const playbackAudioContextRef = useRef<AudioContext | null>(null)
+
+  // 音声再生機能
+  const playAudioData = useCallback(async (audioBase64: string) => {
+    try {
+      // Base64デコード
+      const audioData = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0))
+      
+      // AudioContextを初期化（再生用）
+      if (!playbackAudioContextRef.current) {
+        playbackAudioContextRef.current = new AudioContext()
+      }
+      
+      const audioContext = playbackAudioContextRef.current
+      
+      // PCM16データをAudioBufferに変換（24kHz、モノラル）
+      const sampleRate = 24000
+      const numberOfFrames = audioData.length / 2 // 16bit = 2bytes per sample
+      const audioBuffer = audioContext.createBuffer(1, numberOfFrames, sampleRate)
+      const channelData = audioBuffer.getChannelData(0)
+      
+      // Int16データをFloat32に変換
+      for (let i = 0; i < numberOfFrames; i++) {
+        const sample16 = (audioData[i * 2 + 1] << 8) | audioData[i * 2] // Little-endian
+        channelData[i] = sample16 / 32768.0 // -1.0 to 1.0に正規化
+      }
+      
+      // 再生
+      const source = audioContext.createBufferSource()
+      source.buffer = audioBuffer
+      source.connect(audioContext.destination)
+      source.start()
+      
+      console.log(`AI音声再生開始: ${numberOfFrames}サンプル, ${sampleRate}Hz`)
+      
+    } catch (error) {
+      console.error('音声再生エラー:', error)
+    }
+  }, [])
+
+  // WebSocketメッセージ処理
+  const handleWebSocketMessage = useCallback((data: {
+    type: string
+    source?: string
+    text?: string
+    timestamp?: number
+    risk_level?: string
+    confidence?: number
+    detected_issues?: string[]
+    intervention_needed?: boolean
+    warning_message?: string
+    error?: string
+    audio_data?: string // 音声データ（Base64）
+  }) => {
+    switch (data.type) {
+      case 'session_started':
+        console.log('Live session started successfully')
+        break
+      
+      case 'transcription':
+        if (data.source && data.text && data.timestamp) {
+          const transcriptionResult: TranscriptionResult = {
+            source: data.source as 'user' | 'ai',
+            text: data.text,
+            timestamp: data.timestamp
+          }
+          setTranscript(prev => [...prev, transcriptionResult])
+        }
+        break
+      
+      case 'speech_analysis':
+        if (data.risk_level && data.confidence !== undefined && data.detected_issues && 
+            data.intervention_needed !== undefined && data.timestamp) {
+          const analysisResult: AnalysisResult = {
+            risk_level: data.risk_level as 'SAFE' | 'WARNING' | 'DANGER',
+            confidence: data.confidence,
+            detected_issues: data.detected_issues,
+            intervention_needed: data.intervention_needed,
+            timestamp: data.timestamp
+          }
+          setLastAnalysis(analysisResult)
+          
+          // 警告状態の更新
+          if (data.risk_level === 'DANGER' || data.intervention_needed) {
+            setIsWarning(true)
+            setTimeout(() => setIsWarning(false), 3000)
+          }
+        }
+        break
+      
+      case 'ai_intervention':
+        console.log('AI intervention triggered:', data.warning_message)
+        setIsWarning(true)
+        setTimeout(() => setIsWarning(false), 5000)
+        break
+      
+      case 'ai_audio_response':
+        console.log('AI音声レスポンス受信')
+        if (data.audio_data) {
+          playAudioData(data.audio_data) // 受信した音声データを再生
+        }
+        break
+      
+      case 'session_error':
+        console.error('Session error:', data.error)
+        setConnectionState(prev => ({ ...prev, error: data.error || 'Unknown error' }))
+        break
+    }
+  }, [playAudioData])
+
+  // WebSocket設定を取得
+  const getWebSocketConfig = useCallback(async () => {
+    try {
+      const response = await fetch('/api/audio-analysis')
+      const config = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(config.error || 'Failed to get WebSocket configuration')
+      }
+      
+      if (config.backend_status === 'offline') {
+        throw new Error('Backend service is currently offline')
+      }
+      
+      return config
+    } catch (error) {
+      console.error('Failed to get WebSocket config:', error)
+      throw error
+    }
+  }, [])
+
+  // WebSocket接続機能
+  const connectWebSocket = useCallback(async () => {
+    if (websocketRef.current?.readyState === WebSocket.OPEN) {
+      return
+    }
+
+    setConnectionState(prev => ({ ...prev, isConnecting: true, error: null }))
+
+    try {
+      // Next.js API Route経由でWebSocket設定を取得
+      console.log('Fetching WebSocket config from Next.js API...')
+      const config = await getWebSocketConfig()
+      console.log('WebSocket config received:', config)
+      
+      const wsUrl = config.websocket_url
+      
+      console.log('Connecting to WebSocket via Next.js API:', wsUrl)
+      
+      const ws = new WebSocket(wsUrl)
+      websocketRef.current = ws
+
+      ws.onopen = () => {
+        console.log('WebSocket connected')
+        setConnectionState({ isConnected: true, isConnecting: false, error: null })
+        
+        // セッション開始メッセージを送信（設定から取得した情報を使用）
+        ws.send(JSON.stringify({
+          type: 'start_session',
+          config: {
+            language: 'ja-JP',
+            model: 'gemini-2.0-flash-live-preview-04-09',
+            sample_rate: config.session_config?.sample_rate || 16000
+          }
+        }))
+      }
+
+      ws.onclose = () => {
+        console.log('WebSocket disconnected')
+        setConnectionState({ isConnected: false, isConnecting: false, error: null })
+      }
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error)
+        setConnectionState({ 
+          isConnected: false, 
+          isConnecting: false, 
+          error: 'WebSocket接続エラーが発生しました' 
+        })
+      }
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          handleWebSocketMessage(data)
+        } catch (error) {
+          console.error('WebSocket message parse error:', error)
+        }
+      }
+
+    } catch (error) {
+      console.error('WebSocket connection failed:', error)
+      setConnectionState({ 
+        isConnected: false, 
+        isConnecting: false, 
+        error: 'WebSocket接続に失敗しました' 
+      })
+    }
+  }, [handleWebSocketMessage, getWebSocketConfig])
+
+  const disconnectWebSocket = useCallback(() => {
+    if (websocketRef.current) {
+      websocketRef.current.close()
+      websocketRef.current = null
+    }
+  }, [])
+
+  // 音声データをWebSocketに送信
+  const sendAudioChunk = useCallback((audioData: ArrayBuffer) => {
+    if (websocketRef.current?.readyState === WebSocket.OPEN) {
+      const base64Data = btoa(String.fromCharCode(...new Uint8Array(audioData)))
+      websocketRef.current.send(JSON.stringify({
+        type: 'audio_chunk',
+        audio_data: base64Data
+      }))
+    }
+  }, [])
+
+  // 音声ストリーミング設定
+  const setupAudioStreaming = useCallback(async (stream: MediaStream) => {
+    try {
+      const audioContext = new AudioContext({ sampleRate: 16000 })
+      audioContextRef.current = audioContext
+      
+      const source = audioContext.createMediaStreamSource(stream)
+      const processor = audioContext.createScriptProcessor(4096, 1, 1)
+      processorRef.current = processor
+      
+      processor.onaudioprocess = (event) => {
+        const inputData = event.inputBuffer.getChannelData(0)
+        
+        // Float32からInt16に変換
+        const pcm16 = new Int16Array(inputData.length)
+        for (let i = 0; i < inputData.length; i++) {
+          pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF
+        }
+        
+        // ArrayBufferに変換してWebSocketに送信
+        sendAudioChunk(pcm16.buffer)
+      }
+      
+      source.connect(processor)
+      processor.connect(audioContext.destination)
+      
+    } catch (error) {
+      console.error('Audio streaming setup failed:', error)
+    }
+  }, [sendAudioChunk])
+
+  // 音声ストリーミング停止
+  const stopAudioStreaming = useCallback(() => {
+    if (processorRef.current) {
+      processorRef.current.disconnect()
+      processorRef.current = null
+    }
+    
+    if (audioContextRef.current) {
+      audioContextRef.current.close()
+      audioContextRef.current = null
+    }
+  }, [])
 
   // スライムアニメーション
   useEffect(() => {
@@ -55,15 +345,23 @@ export default function AudioAnalysis() {
 
   const startListening = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // WebSocket接続
+      connectWebSocket()
+      
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true
+        }
+      })
       streamRef.current = stream
       
-      // MediaRecorderの設定（実際の実装時に使用）
-      mediaRecorderRef.current = new MediaRecorder(stream)
+      // 音声ストリーミング設定
+      await setupAudioStreaming(stream)
       
       setIsListening(true)
-      
-      // TODO: 実際のリアルタイム音声分析とGemini連携を実装
       console.log('音声監視開始...')
       
     } catch (error) {
@@ -78,9 +376,14 @@ export default function AudioAnalysis() {
       streamRef.current = null
     }
     
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop()
-      mediaRecorderRef.current = null
+    // 音声ストリーミング停止
+    stopAudioStreaming()
+    
+    // WebSocket停止メッセージ送信
+    if (websocketRef.current?.readyState === WebSocket.OPEN) {
+      websocketRef.current.send(JSON.stringify({
+        type: 'stop_session'
+      }))
     }
     
     setIsListening(false)
@@ -88,13 +391,7 @@ export default function AudioAnalysis() {
     console.log('音声監視停止')
   }
 
-  // デモ用の警告シミュレーション（実際の実装では削除）
-  const simulateWarning = () => {
-    setIsWarning(true)
-    setTimeout(() => setIsWarning(false), 3000)
-  }
-
-  // デモ用の文字起こしシミュレーション
+  // デモ用の文字起こしシミュレーション（開発用）
   const addDemoTranscript = () => {
     const demoTexts = [
       'こんにちは、今日の会議を始めます。',
@@ -105,17 +402,27 @@ export default function AudioAnalysis() {
       '質問があれば遠慮なくどうぞ。'
     ]
     const randomText = demoTexts[Math.floor(Math.random() * demoTexts.length)]
-    const timestamp = new Date().toLocaleTimeString()
-    setTranscript(prev => [...prev, `[${timestamp}] ${randomText}`])
+    const transcriptionResult: TranscriptionResult = {
+      source: 'user',
+      text: randomText,
+      timestamp: Date.now()
+    }
+    setTranscript(prev => [...prev, transcriptionResult])
   }
 
-  // 監視開始時に定期的に文字起こしを追加（デモ用）
+  // デモ用の警告シミュレーション（開発用）
+  const simulateWarning = () => {
+    setIsWarning(true)
+    setTimeout(() => setIsWarning(false), 3000)
+  }
+
+  // クリーンアップ
   useEffect(() => {
-    if (isListening) {
-      const interval = setInterval(addDemoTranscript, 3000)
-      return () => clearInterval(interval)
+    return () => {
+      disconnectWebSocket()
+      stopAudioStreaming()
     }
-  }, [isListening])
+  }, [disconnectWebSocket, stopAudioStreaming])
 
   return (
     <div className="h-full bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 p-6 overflow-y-auto">
@@ -197,7 +504,6 @@ export default function AudioAnalysis() {
                       </>
                     ) : (
                       <>
-                        
                         <Button 
                           onClick={stopListening}
                           variant="outline"
@@ -219,16 +525,16 @@ export default function AudioAnalysis() {
               {/* システムステータス（常に表示、監視中のみ内容変更） */}
               <div className="w-full grid grid-cols-3 gap-3">
                 <div className={`border rounded-lg p-2 text-center transition-all duration-300 ${
-                  isListening 
+                  connectionState.isConnected 
                     ? 'bg-green-50 border-green-200' 
                     : 'bg-gray-50 border-gray-200'
                 }`}>
                   <div className={`text-xs font-semibold ${
-                    isListening ? 'text-green-600' : 'text-gray-400'
-                  }`}>AI エンジン</div>
+                    connectionState.isConnected ? 'text-green-600' : 'text-gray-400'
+                  }`}>WebSocket</div>
                   <div className={`text-xs ${
-                    isListening ? 'text-green-500' : 'text-gray-400'
-                  }`}>{isListening ? 'オンライン' : 'スタンバイ'}</div>
+                    connectionState.isConnected ? 'text-green-500' : 'text-gray-400'
+                  }`}>{connectionState.isConnected ? '接続' : '切断'}</div>
                 </div>
                 <div className={`border rounded-lg p-2 text-center transition-all duration-300 ${
                   isListening 
@@ -243,25 +549,31 @@ export default function AudioAnalysis() {
                   }`}>{isListening ? 'アクティブ' : '待機中'}</div>
                 </div>
                 <div className={`border rounded-lg p-2 text-center transition-all duration-300 ${
-                  isListening 
-                    ? (isWarning 
+                  lastAnalysis 
+                    ? (lastAnalysis.risk_level === 'DANGER' 
                         ? 'bg-red-50 border-red-200' 
-                        : 'bg-purple-50 border-purple-200')
+                        : lastAnalysis.risk_level === 'WARNING'
+                        ? 'bg-yellow-50 border-yellow-200'
+                        : 'bg-green-50 border-green-200')
                     : 'bg-gray-50 border-gray-200'
                 }`}>
                   <div className={`text-xs font-semibold ${
-                    isListening 
-                      ? (isWarning ? 'text-red-600' : 'text-purple-600')
+                    lastAnalysis 
+                      ? (lastAnalysis.risk_level === 'DANGER' ? 'text-red-600' 
+                        : lastAnalysis.risk_level === 'WARNING' ? 'text-yellow-600'
+                        : 'text-green-600')
                       : 'text-gray-400'
                   }`}>
-                    コンプライアンス
+                    AI分析
                   </div>
                   <div className={`text-xs ${
-                    isListening 
-                      ? (isWarning ? 'text-red-500' : 'text-purple-500')
+                    lastAnalysis 
+                      ? (lastAnalysis.risk_level === 'DANGER' ? 'text-red-500' 
+                        : lastAnalysis.risk_level === 'WARNING' ? 'text-yellow-500'
+                        : 'text-green-500')
                       : 'text-gray-400'
                   }`}>
-                    {isListening ? (isWarning ? '違反検知' : 'クリア') : '無効'}
+                    {lastAnalysis ? lastAnalysis.risk_level : '待機中'}
                   </div>
                 </div>
               </div>
@@ -286,7 +598,7 @@ export default function AudioAnalysis() {
             {/* 文字起こし内容 */}
             <div className="flex-1 overflow-y-auto">
               <div className="space-y-3">
-                {transcript.map((text, index) => (
+                {transcript.map((item, index) => (
                   <div 
                     key={index}
                     className={`p-3 rounded-lg transition-all duration-300 ${
@@ -295,14 +607,26 @@ export default function AudioAnalysis() {
                         : 'bg-slate-50 border border-slate-200'
                     }`}
                   >
-                    <p className="text-sm text-slate-700 leading-relaxed">
-                      {text}
+                    <div className="flex items-start gap-2">
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        item.source === 'user' 
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'bg-purple-100 text-purple-700'
+                      }`}>
+                        {item.source === 'user' ? 'ユーザー' : 'AI'}
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        {new Date(item.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-700 leading-relaxed mt-2">
+                      {item.text}
                     </p>
                   </div>
                 ))}
                 
                 {/* 監視中でない場合の案内 */}
-                {!isListening && transcript.length <= 3 && (
+                {!isListening && transcript.length === 0 && (
                   <div className="text-center py-8">
                     <div className="text-slate-400 text-sm">
                       音声監視を開始すると、<br />
@@ -316,15 +640,15 @@ export default function AudioAnalysis() {
             {/* フッター */}
             <div className="flex-shrink-0 pt-3 border-t border-slate-200">
               <div className="flex items-center justify-between text-xs text-slate-500">
-                <span>文字起こし精度: {isListening ? '95%' : '---'}</span>
-                <span>総文字数: {transcript.join(' ').length} 文字</span>
+                <span>接続状況: {connectionState.isConnected ? '接続中' : '切断中'}</span>
+                <span>転写数: {transcript.length} 件</span>
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* デモ用ボタン（開発中のみ表示） */}
-        {isListening && process.env.NODE_ENV === 'development' && (
+        {process.env.NODE_ENV === 'development' && (
           <div className="absolute bottom-6 right-6 space-y-2">
             <Button 
               onClick={simulateWarning}
