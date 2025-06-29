@@ -564,6 +564,7 @@ async def analyze_chat(request: ChatAnalysisRequest):
             detailed_findings=analysis_result.get("detailed_findings", []),
             processing_time_ms=processing_time,
         )
+        response.summary["analysis_timestamp"] = datetime.now().isoformat()
 
         logger.info(f"チャット分析完了: 処理時間 {processing_time:.1f}ms")
         return response
