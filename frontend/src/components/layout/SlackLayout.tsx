@@ -113,29 +113,6 @@ export function SlackLayout({
               </div>
             </div>
 
-            {/* ダイレクトメッセージセクション */}
-            <div className="mt-6">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">
-                  ダイレクトメッセージ
-                </h2>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-gray-400 hover:text-white hover:bg-gray-700 p-1 h-6 w-6"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-              
-              {/* DM一覧（将来の機能） */}
-              <div className="space-y-1">
-                <div className="flex items-center px-3 py-2 rounded-md text-gray-500 text-sm">
-                  <Users className="h-4 w-4 mr-2" />
-                  まだダイレクトメッセージはありません
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 
