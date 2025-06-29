@@ -138,7 +138,7 @@ json_formatter_agent = LlmAgent(
   "suggestions": ["ーーーのように表現すると良いでしょう", "--の共有は避けてください"],
   "flagged_content": ["池田さんの住所", "お前はクズだ"],
   "processing_time_ms": 2,
-  "compliance_notes": "コンプライアンスに注意してください。何もない場合はから文字列",
+  "compliance_notes": 例："コンプライアンスに注意してください。",
   "detailed_analysis": {
     "sentiment": "positive|neutral|negative",
     "emotion": "happy|sad|angry|neutral|excited|worried",
