@@ -48,15 +48,18 @@ export default function AudioAnalysis() {
   const processorRef = useRef<ScriptProcessorNode | null>(null)
   const playbackAudioContextRef = useRef<AudioContext | null>(null)
 
-  // 音声再生機能
+  // 音声再生機能（品質改善版）
   const playAudioData = useCallback(async (audioBase64: string) => {
     try {
       // Base64デコード
       const audioData = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0))
       
-      // AudioContextを初期化（再生用）
+      // AudioContextを初期化（高品質設定）
       if (!playbackAudioContextRef.current) {
-        playbackAudioContextRef.current = new AudioContext()
+        playbackAudioContextRef.current = new AudioContext({
+          sampleRate: 48000, // より高いサンプリングレートで初期化
+          latencyHint: 'playback' // 再生品質を優先
+        })
       }
       
       const audioContext = playbackAudioContextRef.current
@@ -67,19 +70,42 @@ export default function AudioAnalysis() {
       const audioBuffer = audioContext.createBuffer(1, numberOfFrames, sampleRate)
       const channelData = audioBuffer.getChannelData(0)
       
-      // Int16データをFloat32に変換
+      // Int16データをFloat32に変換（エンディアンネス修正）
+      const dataView = new DataView(audioData.buffer)
+      let maxAmplitude = 0
+      
+      // 最大振幅を計算（正規化用）
       for (let i = 0; i < numberOfFrames; i++) {
-        const sample16 = (audioData[i * 2 + 1] << 8) | audioData[i * 2] // Little-endian
-        channelData[i] = sample16 / 32768.0 // -1.0 to 1.0に正規化
+        const sample16 = dataView.getInt16(i * 2, true) // Little-endian
+        maxAmplitude = Math.max(maxAmplitude, Math.abs(sample16))
       }
+      
+      // 正規化とスムージング
+      const normalizationFactor = maxAmplitude > 0 ? 16384 / maxAmplitude : 1
+      for (let i = 0; i < numberOfFrames; i++) {
+        const sample16 = dataView.getInt16(i * 2, true) // Little-endian
+        let normalizedSample = (sample16 * normalizationFactor) / 32768.0
+        
+        // 軽いローパスフィルタ（ノイズ除去）
+        if (i > 0) {
+          normalizedSample = normalizedSample * 0.8 + channelData[i - 1] * 0.2
+        }
+        
+        channelData[i] = Math.max(-1, Math.min(1, normalizedSample)) // クリッピング防止
+      }
+      
+      // ゲインノードで音量調整
+      const gainNode = audioContext.createGain()
+      gainNode.gain.value = 0.8 // 80%の音量で再生
       
       // 再生
       const source = audioContext.createBufferSource()
       source.buffer = audioBuffer
-      source.connect(audioContext.destination)
+      source.connect(gainNode)
+      gainNode.connect(audioContext.destination)
       source.start()
       
-      console.log(`AI音声再生開始: ${numberOfFrames}サンプル, ${sampleRate}Hz`)
+      console.log(`AI音声再生開始: ${numberOfFrames}サンプル, ${sampleRate}Hz, 正規化係数: ${normalizationFactor.toFixed(2)}`)
       
     } catch (error) {
       console.error('音声再生エラー:', error)
