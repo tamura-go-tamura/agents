@@ -4,7 +4,7 @@ import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ChatRoom as ChatRoomType } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
-import { Plus, Hash, Users, Settings, MessageSquare, Mic } from 'lucide-react';
+import { Plus, Hash, Users, Settings, MessageSquare, Mic, FileText } from 'lucide-react';
 
 interface SlackLayoutProps {
   children: React.ReactNode;
@@ -14,6 +14,11 @@ interface SlackLayoutProps {
   onCreateRoom: () => void;
   onAudioModeSelect: () => void;
   isAudioMode?: boolean;
+  // チャット関連の追加プロパティ
+  isAnalysisMode?: boolean;
+  onAnalysisModeToggle?: () => void;
+  onShowReport?: () => void;
+  messageCount?: number;
 }
 
 export function SlackLayout({ 
@@ -23,7 +28,11 @@ export function SlackLayout({
   chatRooms,
   onCreateRoom,
   onAudioModeSelect,
-  isAudioMode = false
+  isAudioMode = false,
+  isAnalysisMode = false,
+  onAnalysisModeToggle,
+  onShowReport,
+  messageCount = 0
 }: SlackLayoutProps) {
   const { user, logout } = useAuth();
 
@@ -179,11 +188,49 @@ export function SlackLayout({
           <>
             {/* チャットヘッダー */}
             <div className="bg-white border-b border-gray-200 px-6 py-4">
-              <div className="flex items-center">
-                <Hash className="h-5 w-5 text-gray-500 mr-2" />
-                <h1 className="text-xl font-semibold text-gray-900">{selectedRoom.name}</h1>
-                <div className="ml-4 text-sm text-gray-500">
-                  メンバー
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Hash className="h-5 w-5 text-gray-500 mr-2" />
+                  <h1 className="text-xl font-semibold text-gray-900">{selectedRoom.name}</h1>
+                  <div className="ml-4 text-sm text-gray-500">
+                    {messageCount > 0 ? `${messageCount}件のメッセージ` : 'メンバー'}
+                  </div>
+                </div>
+                
+                {/* 分析コントロール */}
+                <div className="flex items-center space-x-4">
+                  {/* 分析モードトグル */}
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-600">検知モード</span>
+                    <button
+                      onClick={onAnalysisModeToggle}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                        isAnalysisMode ? 'bg-blue-600' : 'bg-gray-300'
+                      }`}
+                      type="button"
+                      role="switch"
+                      aria-checked={isAnalysisMode}
+                      title={isAnalysisMode ? '検知モードON' : '検知モードOFF'}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
+                          isAnalysisMode ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  
+                  {/* レポートボタン */}
+                  <Button
+                    onClick={onShowReport}
+                    variant="outline"
+                    size="sm"
+                    className="border-blue-600 text-blue-600 hover:bg-blue-50"
+                    disabled={messageCount === 0}
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    分析レポート
+                  </Button>
                 </div>
               </div>
               <div className="text-sm text-gray-600 mt-1">

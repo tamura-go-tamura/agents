@@ -6,10 +6,13 @@ import { LoginForm } from '@/components/auth/UserSelect';
 import { SlackLayout } from '@/components/layout/SlackLayout';
 import { ChatRoom } from '@/components/chat/ChatRoom';
 import AudioAnalysis from '@/components/audio/AudioAnalysis';
+import ChatAnalysisReport from '@/components/chat/ChatAnalysisReport';
 import { 
   ChatRoom as ChatRoomType, 
+  ChatMessage,
   listenToChatRooms, 
-  createChatRoom 
+  createChatRoom,
+  listenToMessages
 } from '@/lib/firebase';
 
 export default function Home() {
@@ -21,6 +24,12 @@ export default function Home() {
   const [newRoomDescription, setNewRoomDescription] = useState('');
   const [creating, setCreating] = useState(false);
   const [isAudioMode, setIsAudioMode] = useState(false);
+  
+  // チャット分析関連の状態
+  const [isAnalysisMode, setIsAnalysisMode] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [messageCount, setMessageCount] = useState(0);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   // チャットルーム一覧をリアルタイムで取得
   useEffect(() => {
@@ -33,6 +42,22 @@ export default function Home() {
     return () => unsubscribe();
   }, [user]);
 
+  // 選択されたルームのメッセージをリアルタイムで取得
+  useEffect(() => {
+    if (!selectedRoom?.id) {
+      setMessages([]);
+      setMessageCount(0);
+      return;
+    }
+    
+    const unsubscribe = listenToMessages(selectedRoom.id, (newMessages) => {
+      setMessages(newMessages);
+      setMessageCount(newMessages.length);
+    });
+
+    return () => unsubscribe();
+  }, [selectedRoom?.id]);
+
   const handleCreateRoom = async () => {
     setShowCreateRoom(true);
   };
@@ -40,11 +65,21 @@ export default function Home() {
   const handleAudioModeSelect = () => {
     setSelectedRoom(null);
     setIsAudioMode(true);
+    setShowReport(false);
   };
 
   const handleRoomSelect = (room: ChatRoomType | null) => {
     setSelectedRoom(room);
     setIsAudioMode(false);
+    setShowReport(false);
+  };
+
+  const handleAnalysisModeToggle = () => {
+    setIsAnalysisMode(!isAnalysisMode);
+  };
+
+  const handleShowReport = () => {
+    setShowReport(true);
   };
 
   const handleCreateRoomSubmit = async (e: React.FormEvent) => {
@@ -79,6 +114,22 @@ export default function Home() {
     return <LoginForm />;
   }
 
+  // レポート画面を表示する場合
+  if (showReport && selectedRoom) {
+    const chatMessages = messages.map(msg => ({
+      user: msg.senderName || 'Unknown',
+      content: msg.content,
+      timestamp: msg.timestamp.toDate().toISOString()
+    }));
+    
+    return (
+      <ChatAnalysisReport 
+        onBack={() => setShowReport(false)}
+        chatMessages={chatMessages}
+      />
+    );
+  }
+
   return (
     <>
       <SlackLayout
@@ -88,11 +139,15 @@ export default function Home() {
         onCreateRoom={handleCreateRoom}
         onAudioModeSelect={handleAudioModeSelect}
         isAudioMode={isAudioMode}
+        isAnalysisMode={isAnalysisMode}
+        onAnalysisModeToggle={handleAnalysisModeToggle}
+        onShowReport={handleShowReport}
+        messageCount={messageCount}
       >
         {isAudioMode ? (
           <AudioAnalysis />
         ) : (
-          selectedRoom && <ChatRoom room={selectedRoom} />
+          selectedRoom && <ChatRoom room={selectedRoom} isAnalysisMode={isAnalysisMode} />
         )}
       </SlackLayout>
 
