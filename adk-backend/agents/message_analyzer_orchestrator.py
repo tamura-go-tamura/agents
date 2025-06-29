@@ -134,11 +134,11 @@ json_formatter_agent = LlmAgent(
 {
   "risk_level": "SAFE|WARNING|DANGER",
   "confidence": 0.0-1.0,
-  "detected_issues": ["問題のリスト"],
-  "suggestions": ["改善提案のリスト"],
-  "flagged_content": ["問題のある内容"],
-  "processing_time_ms": 数値,
-  "compliance_notes": "コンプライアンス注意",
+  "detected_issues": ["ーーという言葉が不適切です", "ーーは機密情報です"],
+  "suggestions": ["ーーーのように表現すると良いでしょう", "--の共有は避けてください"],
+  "flagged_content": ["池田さんの住所", "お前はクズだ"],
+  "processing_time_ms": 2,
+  "compliance_notes": "コンプライアンスに注意してください。何もない場合はから文字列",
   "detailed_analysis": {
     "sentiment": "positive|neutral|negative",
     "emotion": "happy|sad|angry|neutral|excited|worried",

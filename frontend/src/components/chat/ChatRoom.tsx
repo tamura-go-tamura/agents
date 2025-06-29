@@ -385,7 +385,6 @@ export function ChatRoom({ room }: ChatRoomProps) {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
-                      handleSendMessage();
                     }
                   }}
                 />

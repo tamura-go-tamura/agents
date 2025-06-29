@@ -4,7 +4,7 @@ import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ChatRoom as ChatRoomType } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
-import { Plus, Hash, Users, Settings, MessageSquare } from 'lucide-react';
+import { Plus, Hash, Users, Settings, MessageSquare, Mic } from 'lucide-react';
 
 interface SlackLayoutProps {
   children: React.ReactNode;
@@ -12,6 +12,8 @@ interface SlackLayoutProps {
   onRoomSelect: (room: ChatRoomType | null) => void;
   chatRooms: ChatRoomType[];
   onCreateRoom: () => void;
+  onAudioModeSelect: () => void;
+  isAudioMode?: boolean;
 }
 
 export function SlackLayout({ 
@@ -19,7 +21,9 @@ export function SlackLayout({
   selectedRoom, 
   onRoomSelect, 
   chatRooms,
-  onCreateRoom 
+  onCreateRoom,
+  onAudioModeSelect,
+  isAudioMode = false
 }: SlackLayoutProps) {
   const { user, logout } = useAuth();
 
@@ -71,6 +75,29 @@ export function SlackLayout({
                   <span className="truncate text-sm">{room.name}</span>
                 </div>
               ))}
+            </div>
+
+            {/* 音声分析セクション */}
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">
+                  音声分析
+                </h2>
+              </div>
+              
+              <div className="space-y-1">
+                <div
+                  onClick={onAudioModeSelect}
+                  className={`flex items-center px-3 py-2 rounded-md cursor-pointer group ${
+                    isAudioMode
+                      ? 'bg-green-600 text-white'
+                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                  }`}
+                >
+                  <Mic className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <span className="truncate text-sm">リアルタイム分析</span>
+                </div>
+              </div>
             </div>
 
             {/* ダイレクトメッセージセクション */}
@@ -127,7 +154,28 @@ export function SlackLayout({
 
       {/* メインコンテンツエリア */}
       <div className="flex-1 flex flex-col">
-        {selectedRoom ? (
+        {isAudioMode ? (
+          <>
+            {/* 音声分析ヘッダー */}
+            <div className="bg-white border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center">
+                <Mic className="h-5 w-5 text-blue-600 mr-2" />
+                <h1 className="text-xl font-semibold text-gray-900">リアルタイム音声分析</h1>
+                <div className="ml-4 text-sm text-gray-500">
+                  AI による音声監視システム
+                </div>
+              </div>
+              <div className="text-sm text-gray-600 mt-1">
+                コンプライアンス違反をリアルタイムで検知・警告します
+              </div>
+            </div>
+            
+            {/* 音声分析コンテンツ */}
+            <div className="flex-1 overflow-hidden">
+              {children}
+            </div>
+          </>
+        ) : selectedRoom ? (
           <>
             {/* チャットヘッダー */}
             <div className="bg-white border-b border-gray-200 px-6 py-4">
@@ -157,13 +205,18 @@ export function SlackLayout({
                 SafeComm AIへようこそ
               </h2>
               <p className="text-gray-600 mb-6 max-w-md">
-                左側のサイドバーからチャットルームを選択するか、
-                新しいルームを作成してください。
+                左側のサイドバーからチャットルームや音声分析モードを選択してください。
               </p>
-              <Button onClick={onCreateRoom} className="bg-blue-600 hover:bg-blue-700">
-                <Plus className="h-4 w-4 mr-2" />
-                最初のチャットルームを作成
-              </Button>
+              <div className="flex gap-3 justify-center">
+                <Button onClick={onCreateRoom} className="bg-blue-600 hover:bg-blue-700">
+                  <Plus className="h-4 w-4 mr-2" />
+                  チャットルームを作成
+                </Button>
+                <Button onClick={onAudioModeSelect} variant="outline" className="border-green-600 text-green-600 hover:bg-green-50">
+                  <Mic className="h-4 w-4 mr-2" />
+                  音声分析を開始
+                </Button>
+              </div>
             </div>
           </div>
         )}

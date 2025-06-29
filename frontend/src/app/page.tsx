@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { LoginForm } from '@/components/auth/UserSelect';
 import { SlackLayout } from '@/components/layout/SlackLayout';
 import { ChatRoom } from '@/components/chat/ChatRoom';
+import AudioAnalysis from '@/components/audio/AudioAnalysis';
 import { 
   ChatRoom as ChatRoomType, 
   listenToChatRooms, 
@@ -19,6 +20,7 @@ export default function Home() {
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomDescription, setNewRoomDescription] = useState('');
   const [creating, setCreating] = useState(false);
+  const [isAudioMode, setIsAudioMode] = useState(false);
 
   // チャットルーム一覧をリアルタイムで取得
   useEffect(() => {
@@ -33,6 +35,16 @@ export default function Home() {
 
   const handleCreateRoom = async () => {
     setShowCreateRoom(true);
+  };
+
+  const handleAudioModeSelect = () => {
+    setSelectedRoom(null);
+    setIsAudioMode(true);
+  };
+
+  const handleRoomSelect = (room: ChatRoomType | null) => {
+    setSelectedRoom(room);
+    setIsAudioMode(false);
   };
 
   const handleCreateRoomSubmit = async (e: React.FormEvent) => {
@@ -71,11 +83,17 @@ export default function Home() {
     <>
       <SlackLayout
         selectedRoom={selectedRoom}
-        onRoomSelect={setSelectedRoom}
+        onRoomSelect={handleRoomSelect}
         chatRooms={chatRooms}
         onCreateRoom={handleCreateRoom}
+        onAudioModeSelect={handleAudioModeSelect}
+        isAudioMode={isAudioMode}
       >
-        {selectedRoom && <ChatRoom room={selectedRoom} />}
+        {isAudioMode ? (
+          <AudioAnalysis />
+        ) : (
+          selectedRoom && <ChatRoom room={selectedRoom} />
+        )}
       </SlackLayout>
 
       {/* チャットルーム作成モーダル */}
