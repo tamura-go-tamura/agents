@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/AuthContext';
-import { Send, AlertTriangle, Shield } from 'lucide-react';
+import { Send, AlertTriangle, Shield, FileText } from 'lucide-react';
 import { 
   ChatMessage, 
   ChatRoom as ChatRoomType, 
@@ -15,6 +15,7 @@ import {
   updateMessageAnalysis 
 } from '@/lib/firebase';
 import { Timestamp } from 'firebase/firestore';
+import ChatAnalysisReport from './ChatAnalysisReport';
 
 interface ChatRoomProps {
   room: ChatRoomType;
@@ -55,6 +56,7 @@ export function ChatRoom({ room }: ChatRoomProps) {
   const [realtimeAnalysis, setRealtimeAnalysis] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [isAnalysisMode, setIsAnalysisMode] = useState(false); // 検知モードのトグル
+  const [showReport, setShowReport] = useState(false); // レポート表示状態
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const previewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -229,8 +231,58 @@ export function ChatRoom({ room }: ChatRoomProps) {
 
   if (!user) return null;
 
+  // レポート画面を表示する場合
+  if (showReport) {
+    const chatMessages = messages.map(msg => ({
+      user: msg.senderName || 'Unknown',
+      content: msg.content,
+      timestamp: msg.timestamp.toDate().toISOString()
+    }));
+    
+    return (
+      <ChatAnalysisReport 
+        onBack={() => setShowReport(false)}
+        chatMessages={chatMessages}
+      />
+    );
+  }
+
   return (
     <div className="h-full flex flex-col bg-gray-50">
+      {/* ヘッダー */}
+      <div className="flex-shrink-0 bg-white border-b px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">{room.name}</h2>
+            <p className="text-sm text-gray-600">{messages.length}件のメッセージ</p>
+          </div>
+          <div className="flex items-center space-x-3">
+            {/* 分析モードトグル */}
+            <Button
+              variant={isAnalysisMode ? "default" : "outline"}
+              size="sm"
+              onClick={() => setIsAnalysisMode(!isAnalysisMode)}
+              className="flex items-center space-x-2"
+            >
+              <Shield className="w-4 h-4" />
+              <span>分析モード</span>
+            </Button>
+            
+            {/* レポート生成ボタン */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowReport(true)}
+              disabled={messages.length === 0}
+              className="flex items-center space-x-2"
+            >
+              <FileText className="w-4 h-4" />
+              <span>分析レポート</span>
+            </Button>
+          </div>
+        </div>
+      </div>
+      
       <div className="flex-1 flex min-h-0">
         {/* Chat Area */}
         <div className="flex-1 flex flex-col min-h-0">

@@ -3,43 +3,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Mic, MicOff, Zap, FileText } from 'lucide-react'
+import { Mic, MicOff, Zap } from 'lucide-react'
 
-// WebSocket接続の状態管理
-interface ConnectionState {
-  isConnected: boolean
-  isConnecting: boolean
-  error: string | null
-}
-
-// リアルタイム分析結果
-interface AnalysisResult {
-  risk_level: 'SAFE' | 'WARNING' | 'DANGER'
-  confidence: number
-  detected_issues: string[]
-  intervention_needed: boolean
-  timestamp: number
-}
-
-// 転写結果
-interface TranscriptionResult {
-  source: 'user' | 'ai'
-  text: string
-  timestamp: number
-}
 
 export default function AudioAnalysis() {
   const [isListening, setIsListening] = useState(false)
   const [isWarning, setIsWarning] = useState(false)
   const [slimeShape, setSlimeShape] = useState({ scale: 1, rotation: 0, borderRadius: '50%' })
-  const [connectionState, setConnectionState] = useState<ConnectionState>({
-    isConnected: false,
-    isConnecting: false,
-    error: null
-  })
-  const [transcript, setTranscript] = useState<TranscriptionResult[]>([])
-  const [lastAnalysis, setLastAnalysis] = useState<AnalysisResult | null>(null)
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false) // 音声再生状態
+  
   
   // Refs
   const streamRef = useRef<MediaStream | null>(null)
@@ -138,7 +109,6 @@ export default function AudioAnalysis() {
     })
     audioSourcesRef.current = []
     nextStartTimeRef.current = 0
-    setIsPlayingAudio(false)
   }, [])
 
   // WebSocketメッセージ処理
@@ -170,14 +140,12 @@ export default function AudioAnalysis() {
       case 'ai_audio_stream':
         console.log('AI音声ストリーム受信:', data.chunk_size, 'bytes')
         if (data.audio_data) {
-          setIsPlayingAudio(true) // ストリーミング開始をマーク
           playAudioChunk(data.audio_data) // 音声チャンクを即座に再生
         }
         break
       
       case 'session_error':
         console.error('Session error:', data.error)
-        setConnectionState(prev => ({ ...prev, error: data.error || 'Unknown error' }))
         break
     }
   }, [playAudioData, playAudioChunk])
@@ -209,7 +177,6 @@ export default function AudioAnalysis() {
       return
     }
 
-    setConnectionState(prev => ({ ...prev, isConnecting: true, error: null }))
 
     try {
       // Next.js API Route経由でWebSocket設定を取得
@@ -226,7 +193,6 @@ export default function AudioAnalysis() {
 
       ws.onopen = () => {
         console.log('WebSocket connected')
-        setConnectionState({ isConnected: true, isConnecting: false, error: null })
         
         // セッション開始メッセージを送信（設定から取得した情報を使用）
         ws.send(JSON.stringify({
@@ -241,16 +207,10 @@ export default function AudioAnalysis() {
 
       ws.onclose = () => {
         console.log('WebSocket disconnected')
-        setConnectionState({ isConnected: false, isConnecting: false, error: null })
       }
 
       ws.onerror = (error) => {
         console.error('WebSocket error:', error)
-        setConnectionState({ 
-          isConnected: false, 
-          isConnecting: false, 
-          error: 'WebSocket接続エラーが発生しました' 
-        })
       }
 
       ws.onmessage = (event) => {
@@ -264,11 +224,6 @@ export default function AudioAnalysis() {
 
     } catch (error) {
       console.error('WebSocket connection failed:', error)
-      setConnectionState({ 
-        isConnected: false, 
-        isConnecting: false, 
-        error: 'WebSocket接続に失敗しました' 
-      })
     }
   }, [handleWebSocketMessage, getWebSocketConfig])
 
@@ -418,25 +373,6 @@ export default function AudioAnalysis() {
     setIsListening(false)
     setIsWarning(false)
     console.log('音声監視停止')
-  }
-
-  // デモ用の文字起こしシミュレーション（開発用）
-  const addDemoTranscript = () => {
-    const demoTexts = [
-      'こんにちは、今日の会議を始めます。',
-      'プロジェクトの進捗について話しましょう。',
-      '来週の締切について確認したいことがあります。',
-      'このタスクは重要な案件です。',
-      'チームメンバーの協力をお願いします。',
-      '質問があれば遠慮なくどうぞ。'
-    ]
-    const randomText = demoTexts[Math.floor(Math.random() * demoTexts.length)]
-    const transcriptionResult: TranscriptionResult = {
-      source: 'user',
-      text: randomText,
-      timestamp: Date.now()
-    }
-    setTranscript(prev => [...prev, transcriptionResult])
   }
 
 

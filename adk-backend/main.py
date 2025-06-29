@@ -27,6 +27,9 @@ from google.genai import types
 # ADKオーケストラエージェントをインポート
 from agents.message_analyzer_orchestrator import message_analyzer_orchestrator
 
+# チャット分析レポート用エージェントをインポート
+from agents.chat_analysis_agent import chat_analysis_orchestrator
+
 # 環境変数を読み込み
 load_dotenv()
 
@@ -59,6 +62,13 @@ runner = InMemoryRunner(
     app_name=app_name,
 )
 
+# チャット分析用のランナー
+chat_analysis_app_name = "safecomm_chat_analysis_app"
+chat_analysis_runner = InMemoryRunner(
+    agent=chat_analysis_orchestrator,
+    app_name=chat_analysis_app_name,
+)
+
 # セッション管理
 sessions: Dict[str, Session] = {}
 active_websocket_sessions: Dict[str, Dict[str, Any]] = {}
@@ -84,6 +94,25 @@ class MessageResponse(BaseModel):
     processing_time_ms: float
     compliance_notes: str
     detailed_analysis: Dict[str, Any]
+
+
+class ChatAnalysisRequest(BaseModel):
+    """チャット分析レポートリクエスト"""
+
+    messages: List[Dict[str, Any]]  # チャットメッセージのリスト
+    chat_id: str = "default_chat"
+    user_id: str = "default_user"
+
+
+class ChatAnalysisResponse(BaseModel):
+    """チャット分析レポートレスポンス"""
+
+    summary: Dict[str, Any]
+    compliance_report: Dict[str, Any]
+    confidential_report: Dict[str, Any]
+    timeline_analysis: Dict[str, Any]
+    detailed_findings: List[Dict[str, Any]]
+    processing_time_ms: float
 
 
 async def get_or_create_session(user_id: str) -> Session:
@@ -137,7 +166,7 @@ async def analyze_message(request: MessageRequest):
             if hasattr(event, "content") and event.content:
                 for part in event.content.parts:
                     if hasattr(part, "text") and part.text:
-                        final_response_text += part.text
+                        final_response_text = part.text
 
         # プロンプトベースエージェントのJSONレスポンスを解析
         if final_response_text:
@@ -254,6 +283,7 @@ async def websocket_audio_analysis(websocket: WebSocket):
 
             # Live APIからのレスポンスを受信する並行タスクを開始
             async def handle_live_api_responses():
+                cnt = 0
                 while True:
                     try:
                         async for response in genai_session.receive():
@@ -273,6 +303,9 @@ async def websocket_audio_analysis(websocket: WebSocket):
                                     f"音声チャンク送信: {len(response.data)} bytes"
                                 )
                     except Exception as e:
+                        cnt += 1
+                        if cnt > 10:
+                            break
                         logger.error(f"Live API レスポンス処理エラー: {e}")
 
             response_task = asyncio.create_task(handle_live_api_responses())
@@ -388,12 +421,168 @@ async def websocket_audio_analysis(websocket: WebSocket):
                 pass
 
 
+@app.post("/api/analyze-chat", response_model=ChatAnalysisResponse)
+async def analyze_chat(request: ChatAnalysisRequest):
+    """
+    チャット全体を分析してコンプライアンス・機密情報漏洩レポートを生成
+    """
+    import time
+
+    start_time = time.time()
+
+    try:
+        logger.info(
+            f"チャット分析レポート生成開始: {len(request.messages)}件のメッセージ"
+        )
+
+        # チャット分析用のセッションを取得
+        if request.user_id not in sessions:
+            sessions[request.user_id] = (
+                await chat_analysis_runner.session_service.create_session(
+                    app_name=chat_analysis_app_name, user_id=request.user_id
+                )
+            )
+        session = sessions[request.user_id]
+
+        # チャットメッセージを整理してプロンプトを作成
+        messages_text = ""
+        for i, msg in enumerate(request.messages):
+            timestamp = msg.get("timestamp", f"時刻{i+1}")
+            user = msg.get("user", f"ユーザー{i+1}")
+            content = msg.get("content", msg.get("message", ""))
+            messages_text += f"[{timestamp}] {user}: {content}\n"
+
+        analysis_prompt = f"""
+以下のチャット履歴を包括的に分析してください。
+時系列でのリスク推移、コンプライアンス違反、機密情報漏洩リスクを詳細に評価してください。
+
+【チャット履歴】
+{messages_text}
+
+【分析対象】
+- 参加者: {len(set(msg.get('user', 'unknown') for msg in request.messages))}名
+- メッセージ数: {len(request.messages)}件
+- チャットID: {request.chat_id}
+
+包括的なリスク分析と改善提案を含むレポートを生成してください。
+"""
+
+        # チャット分析エージェントに分析を依頼
+        content = types.Content(
+            role="user", parts=[types.Part.from_text(text=analysis_prompt)]
+        )
+
+        # チャット分析エージェントを実行
+        analysis_result = None
+        final_response_text = ""
+
+        async for event in chat_analysis_runner.run_async(
+            user_id=request.user_id,
+            session_id=session.id,
+            new_message=content,
+        ):
+            # エージェントからのテキストレスポンスを取得
+            if hasattr(event, "content") and event.content:
+                for part in event.content.parts:
+                    if hasattr(part, "text") and part.text:
+                        final_response_text = part.text
+
+        # エージェントのJSONレスポンスを解析
+        if final_response_text:
+            try:
+                # JSONの開始と終了を見つけて抽出
+                json_start = final_response_text.find("{")
+                json_end = final_response_text.rfind("}") + 1
+
+                if json_start != -1 and json_end > json_start:
+                    json_text = final_response_text[json_start:json_end]
+                    analysis_result = json.loads(json_text)
+                    logger.info("チャット分析レポート生成完了")
+                else:
+                    logger.warning(
+                        "レスポンステキストにJSONが見つかりませんでした"
+                    )
+
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON解析エラー: {e}")
+                logger.error(
+                    f"レスポンステキスト: {final_response_text[:500]}..."
+                )
+            except Exception as e:
+                logger.error(f"レスポンス処理エラー: {e}")
+
+        # 分析結果が取得できない場合のフォールバック
+        if not analysis_result:
+            logger.warning(
+                "チャット分析結果が取得できませんでした。フォールバック分析を実行します。"
+            )
+            analysis_result = {
+                "summary": {
+                    "overall_risk_level": "SAFE",
+                    "total_messages": len(request.messages),
+                    "analysis_timestamp": datetime.now().isoformat(),
+                    "chat_duration_minutes": 30,
+                    "participants": list(
+                        set(
+                            msg.get("user", "unknown")
+                            for msg in request.messages
+                        )
+                    ),
+                },
+                "compliance_report": {
+                    "total_violations": 0,
+                    "violation_rate": 0.0,
+                    "legal_risk_level": "low",
+                    "violations": [],
+                    "recommended_actions": [
+                        "分析エージェントからの結果を取得できませんでした"
+                    ],
+                },
+                "confidential_report": {
+                    "total_leaks": 0,
+                    "security_risk_level": "low",
+                    "leak_types": [],
+                    "mitigation_steps": [],
+                },
+                "timeline_analysis": {
+                    "risk_trend": "stable",
+                    "risk_timeline": [],
+                    "participant_stats": [],
+                },
+                "detailed_findings": [],
+            }
+
+        processing_time = (time.time() - start_time) * 1000
+
+        response = ChatAnalysisResponse(
+            summary=analysis_result.get("summary", {}),
+            compliance_report=analysis_result.get("compliance_report", {}),
+            confidential_report=analysis_result.get(
+                "confidential_report", {}
+            ),
+            timeline_analysis=analysis_result.get("timeline_analysis", {}),
+            detailed_findings=analysis_result.get("detailed_findings", []),
+            processing_time_ms=processing_time,
+        )
+
+        logger.info(f"チャット分析完了: 処理時間 {processing_time:.1f}ms")
+        return response
+
+    except Exception as e:
+        logger.error(f"チャット分析エラー: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"チャット分析処理中にエラーが発生しました: {str(e)}",
+        )
+
+
 if __name__ == "__main__":
     import uvicorn
 
     logger.info("SafeComm統合APIサーバーを起動しています...")
     logger.info("- テキスト分析: POST /api/analyze-message")
     logger.info("- リアルタイム音声分析: WebSocket /ws/audio-analysis")
+    logger.info("- チャット分析: POST /api/analyze-chat")
     logger.info("- ヘルスチェック: GET /health")
 
     uvicorn.run(
