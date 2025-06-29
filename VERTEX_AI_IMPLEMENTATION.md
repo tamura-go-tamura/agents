@@ -35,7 +35,9 @@ communication/
 
 ## 🚀 セットアップ
 
-### 1. バックエンドセットアップ
+### ローカル開発環境
+
+#### 1. バックエンドセットアップ
 
 ```bash
 cd adk-backend
@@ -54,7 +56,7 @@ cp .env.example .env
 # .envファイルを編集してGoogle Cloudプロジェクト情報を設定
 ```
 
-### 2. 環境変数設定
+#### 2. 環境変数設定
 
 `.env`ファイルに以下を設定:
 
@@ -64,7 +66,7 @@ GOOGLE_CLOUD_LOCATION=us-central1
 GOOGLE_GENAI_USE_VERTEXAI=True
 ```
 
-### 3. Google Cloud認証
+#### 3. Google Cloud認証
 
 ```bash
 # Google Cloud CLIでログイン
@@ -78,7 +80,7 @@ gcloud config set project your-project-id
 gcloud services enable aiplatform.googleapis.com
 ```
 
-### 4. サーバー起動
+#### 4. サーバー起動
 
 ```bash
 # バックエンドサーバー起動
@@ -86,13 +88,40 @@ cd adk-backend
 python start_server.py
 ```
 
-### 5. フロントエンド起動
+#### 5. フロントエンド起動
 
 ```bash
 # フロントエンド起動
 cd frontend
 npm run dev
 ```
+
+### 🌐 本番環境デプロイ (Google Cloud Run)
+
+本格的なWebアプリケーションとして、Google Cloud Runにデプロイできます。
+
+#### シンプルデプロイ
+
+```bash
+# 1. Dockerイメージをビルド
+docker build -t gcr.io/YOUR_PROJECT_ID/safecomm-ai .
+
+# 2. イメージをプッシュ  
+docker push gcr.io/YOUR_PROJECT_ID/safecomm-ai
+
+# 3. service.yamlのプレースホルダーを実際の値に置き換え
+# PROJECT_ID, REGION, PROJECT_NUMBERを編集
+
+# 4. Cloud Runサービスをデプロイ
+gcloud run services replace service.yaml --region=us-central1
+```
+
+#### デプロイ後のアクセス
+
+- Webアプリケーション: Cloud RunサービスURL
+- 音声分析機能: `/audio`ページ
+- チャット分析機能: `/chat`ページ
+- ヘルスチェック: `/health`エンドポイント
 
 ## 🔧 使用方法
 
