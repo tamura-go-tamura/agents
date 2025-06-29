@@ -253,35 +253,36 @@ async def websocket_audio_analysis(websocket: WebSocket):
             async def handle_live_api_responses():
                 import wave
 
-                wf = wave.open("saved_audio/audio.wav", "wb")
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(24000)  # Output is 24kHz
-                audio_chunks = []  # 音声データを蓄積
+                while True:
+                    wf = wave.open("saved_audio/audio.wav", "wb")
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(24000)  # Output is 24kHz
+                    audio_chunks = []  # 音声データを蓄積
 
-                try:
-                    async for response in genai_session.receive():
-                        if hasattr(response, "data") and response.data:
-                            wf.writeframes(response.data)
-                            audio_chunks.append(response.data)
-                finally:
-                    wf.close()
+                    try:
+                        async for response in genai_session.receive():
+                            if hasattr(response, "data") and response.data:
+                                wf.writeframes(response.data)
+                                audio_chunks.append(response.data)
+                    finally:
+                        wf.close()
 
-                    # 蓄積した音声データを結合してフロントエンドに送信
-                    if audio_chunks:
-                        combined_audio = b"".join(audio_chunks)
-                        audio_base64 = base64.b64encode(
-                            combined_audio
-                        ).decode("utf-8")
-                        await websocket.send_json(
-                            {
-                                "type": "ai_audio_response",
-                                "audio_data": audio_base64,
-                            }
-                        )
-                        logger.info(
-                            f"結合音声データ送信: {len(combined_audio)} bytes"
-                        )
+                        # 蓄積した音声データを結合してフロントエンドに送信
+                        if audio_chunks:
+                            combined_audio = b"".join(audio_chunks)
+                            audio_base64 = base64.b64encode(
+                                combined_audio
+                            ).decode("utf-8")
+                            await websocket.send_json(
+                                {
+                                    "type": "ai_audio_response",
+                                    "audio_data": audio_base64,
+                                }
+                            )
+                            logger.info(
+                                f"結合音声データ送信: {len(combined_audio)} bytes"
+                            )
 
             response_task = asyncio.create_task(handle_live_api_responses())
 
